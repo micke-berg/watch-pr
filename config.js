@@ -4,7 +4,6 @@
 // colleague only has to set the identity + path bits, not every knob.
 const fs = require("fs");
 const path = require("path");
-const os = require("os");
 
 // Defaults are generic and host-neutral — nothing organization-specific ships here.
 // Real values live in config.json (copy config.example.json → config.json).
@@ -23,7 +22,8 @@ const DEFAULTS = {
                                                        //   azure: "repo"; github: "owner/repo"
   me: "",                                              // your identity (Azure display name / GitHub login); your own
                                                        //   comments never ping you. GitHub resolves it from gh if empty.
-  notifyPs1: path.join(os.homedir(), ".claude", "hooks", "notify.ps1"), // desktop/phone notifier (Windows)
+  ntfyTopic: "",                                       // optional ntfy.sh topic for a phone push (empty = no phone push)
+  ntfyServer: "https://ntfy.sh",                       // ntfy server base URL (self-host or ntfy.sh)
   claudeExe: "",                                       // full path to claude CLI for /analyze-conflict; empty disables it
   mainRepoDir: "",                                     // git-dir fallback when a PR's worktree is gone
   port: 7878,                                          // dashboard/server port (PR_WATCH_PORT env overrides)

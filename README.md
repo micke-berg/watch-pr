@@ -8,6 +8,10 @@ optional phone) notification only when something actually needs action.
 It is **read-only** against your PR host: it never comments, votes, sets auto-complete, or
 merges. The only thing it writes is a small local state file.
 
+Works with **Azure DevOps** or **GitHub**, on **Windows, macOS, or Linux** — the same core,
+behind a small provider adapter and an OS-aware notifier. Zero runtime dependencies: pure
+Node plus your host's own CLI (`az` / `gh`).
+
 ## What you get
 
 - A live dashboard at `http://localhost:7878` — one card per PR (CI, approvals, unresolved
@@ -16,80 +20,133 @@ merges. The only thing it writes is a small local state file.
 - Merged/abandoned PRs auto-tidy into a "Done" strip and expire after 24h.
 - **＋ Watch PR** — add any PR by id; monitored just like the rest.
 
+## How it works (the short version)
+
+- **The OS is auto-detected** at runtime (Node's `process.platform`). There is no flag to
+  set and nothing to accept — the notifier picks Windows toast / macOS `osascript` /
+  Linux `notify-send` by itself. `npm start` is the same command everywhere.
+- **The provider is one config line** (`"provider": "azure" | "github"`). The dashboard,
+  poller, and notifications never learn which host they're talking to.
+- **Auth lives in the host CLI**, not here: you run `az login` or `gh auth login` once.
+  watch-pr holds no tokens.
+- The **only** OS-specific setup is the optional "always-on at login" step (below), because
+  adding something to your login items should be a deliberate choice — not automatic.
+
 ## Requirements
 
 - **Node.js 18+**
-- **Azure CLI** (`az`) with the **azure-devops** extension, logged in (`az login`), and
-  org/project defaults set:
-  ```
-  az devops configure --defaults organization=https://dev.azure.com/<org> project=<project>
-  ```
-- **Windows** (current build — see Portability). Notifications go through a PowerShell script.
+- Your host's CLI, authenticated once:
+  - **Azure DevOps:** `az` with the **azure-devops** extension → `az login`
+  - **GitHub:** `gh` → `gh auth login`
 
 ## Setup
 
-1. Copy the `pr-watch/` folder anywhere on your machine.
-2. Copy `config.example.json` → `config.json` and fill it in:
+1. Clone/copy this repo anywhere on your machine, then `npm install` (there are no
+   dependencies — this just wires up `npm start`).
+2. Copy `config.example.json` → `config.json` and set at least `provider` and
+   `defaultRepository`:
+
+   **GitHub** (`"provider": "github"`) — repos are `owner/repo`:
 
    | key | what |
    |-----|------|
-   | `azCliPath` | full path to `az.cmd` |
+   | `provider` | `"github"` |
+   | `defaultRepository` | `owner/repo` used when a watched PR doesn't specify one |
+   | `me` | your GitHub login; leave empty to auto-resolve via `gh api user` |
+   | `ghCliPath` | optional; defaults to `gh` (`gh.exe` on Windows) on PATH |
+
+   **Azure DevOps** (`"provider": "azure"`) — repos are just the repo name:
+
+   | key | what |
+   |-----|------|
+   | `provider` | `"azure"` |
    | `organization` / `project` | your Azure DevOps org URL + project |
    | `defaultRepository` | repo used when a watched PR doesn't specify one |
    | `me` | your reviewer display name (so your own comments never ping you) |
-   | `notifyPs1` | path to a desktop/phone notify script; leave default or empty to disable |
-   | `claudeExe` | optional — enables the one-click merge-conflict explainer; empty disables it |
-   | `mainRepoDir` | a local clone, used as a fallback git dir for the analyzer |
-   | `builtBy` / `builtByUrl` | footer attribution |
+   | `azCliPath` | path to `az` (defaults to the standard Windows install / `az` on PATH) |
+
+   Shared (both providers):
+
+   | key | what |
+   |-----|------|
    | `approvalsRequired` / `approvalsPreferred` | your team's approval bar |
+   | `ntfyTopic` / `ntfyServer` | optional phone push (see Notifications) |
+   | `port` | dashboard port (default 7878) |
+   | `claudeExe` / `mainRepoDir` | optional — enables the one-click merge-conflict explainer |
+   | `builtBy` / `builtByUrl` | footer attribution |
 
 3. Start it:
+   ```sh
+   npm start           # = node server.js  (all OSes)
    ```
-   node server.js
-   ```
-   then open `http://localhost:7878` (or double-click `dashboard.cmd`).
+   then open `http://localhost:7878` — or use `dashboard.cmd` (Windows) / `dashboard.sh` (macOS/Linux).
 
-## Always-on (optional)
+## Always-on (optional, one-time per OS)
 
-To keep it running from every login, put a shortcut to `pr-watch-service.vbs` in your
-Startup folder (`Win+R` → `shell:startup`). It runs hidden and is idle-cheap — an empty
-watch list makes zero network calls.
+Keep it running from every login. An empty watch list makes zero network calls, so it's idle-cheap.
+
+- **Windows:** put a shortcut to `pr-watch-service.vbs` in your Startup folder
+  (`Win+R` → `shell:startup`). Runs hidden.
+- **macOS:** copy `macos/com.watchpr.plist.example` to
+  `~/Library/LaunchAgents/com.watchpr.plist`, fill in your `node` path (`which node`) and
+  the repo path, then `launchctl load ~/Library/LaunchAgents/com.watchpr.plist`.
+- **Linux:** a systemd `--user` service running `node server.js`, or just run `npm start`
+  under your usual session manager.
+
+## Notifications
+
+- **Desktop** is automatic and needs no setup: Windows toast, macOS notification, Linux
+  `notify-send`. On macOS the *first* notification may trigger the system's own
+  "allow notifications?" prompt — that's macOS, granted once.
+- **Phone (optional)** via [ntfy](https://ntfy.sh): set `ntfyTopic` to a long private
+  string and subscribe the ntfy app to that topic. Works identically on every OS (a plain
+  HTTPS POST). Notifications are **edge-triggered** — each fires once, only for
+  action-needed events: CI failed, changes requested, a blocking reviewer comment, the
+  approval target reached, and merged.
 
 ## Adding PRs
 
 - Click **＋ Watch PR** on the dashboard and enter a PR id (+ optional repo).
 - Or edit `state.json` directly.
-- If you use the companion Claude Code skills, new PRs auto-register when created.
 
 ## Files
 
 | file | role |
 |------|------|
 | `index.html` | the dashboard (pure presentation; reads `state.json` + the endpoints) |
-| `check.js` | poll + decode core (talks to Azure, decodes votes / threads / CI) |
+| `check.js` | provider-agnostic poll + decode core + the notify/tidy/add-PR loop |
+| `providers/azure.js`, `providers/github.js` | the host adapters (the only host-specific code) |
+| `notify.js` / `notify.ps1` | cross-platform notifier (OS-detected) + the Windows toast helper |
 | `server.js` | static server + resident poller + endpoints |
 | `config.js` / `config.json` | settings (copy from `config.example.json`) |
 | `state.json` | the watch list + per-PR snapshot the dashboard renders |
-| `pr-watch-service.vbs` / `dashboard.cmd` | launchers |
+| `pr-watch-service.vbs` / `dashboard.cmd` / `dashboard.sh` / `macos/…plist` | launchers |
 
 Endpoints (all local): `/status`, `/config`, `POST /check`, `POST /watch?id=&repo=`,
 `POST /dismiss?id=`, `POST /clear-done`, `POST /analyze-conflict?id=`.
 
+## The provider seam
+
+Everything above a small **neutral contract** is host-agnostic. An adapter only implements:
+
+```
+provider.me                       // your identity (own comments never ping you)
+provider.prUrl(repo, id)          // web URL for a PR
+provider.decodePr(id, repo)       // -> the neutral decoded shape (status, ci, approvals, threads, …)
+provider.listMyOpenPrs?()         // optional: [{ id, repo }] for a "watch all my PRs" mode
+```
+
+`decodePr` returns a fixed shape (prStatus, mergeable, isDraft, ci, approvals,
+changesRequested, openComments, threads, ready, …). The core turns that into the card the
+dashboard renders and the edge-triggered notifications — and never learns which host it
+came from. Adding another host (GitLab, Bitbucket, …) is a new file under `providers/`,
+nothing else.
+
 ## Safety
 
-Read-only against your PR host — it only ever reads (`az repos pr show`, policy list,
-pullRequestThreads GET). It never writes to, votes on, or merges a PR. The `✕` / "Clear all"
-buttons only prune your local list.
+Read-only against your PR host — it only ever reads. It never writes to, votes on, or
+merges a PR. The `✕` / "Clear all" buttons only prune your local list.
 
-## Portability (roadmap)
+## License
 
-The dashboard, resident poller, state contract, and the tidy / add-PR logic are host- and
-OS-agnostic. Only two pieces are specific:
-
-- the **provider adapter** — `check.js`, currently Azure DevOps via the `az` CLI;
-- the **OS shim** — notifications + launcher, currently Windows (PowerShell + a Startup `.vbs`).
-
-A **GitHub** adapter (the `gh` CLI — arguably simpler, since GitHub exposes `reviewDecision`
-and `statusCheckRollup` directly) and a **macOS** shim (a `launchd` LaunchAgent + `osascript`
-notifications, with the same cross-platform ntfy phone push) are a clean extraction behind
-that same neutral state shape — not a rewrite.
+MIT.

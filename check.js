@@ -17,9 +17,9 @@
 
 const fs = require("fs");
 const path = require("path");
-const { spawn } = require("child_process");
 
 const config = require("./config.js");
+const { notify } = require("./notify.js"); // cross-platform desktop + optional phone push
 // The provider adapter is the seam: it produces the neutral decoded shape and the PR
 // web URL, and carries the "me" identity. Which adapter loads is config-driven, so the
 // core stays completely host-agnostic. The map is a whitelist so config can't require
@@ -32,23 +32,15 @@ const ME = provider.me; // your own comments are not "a reviewer waiting on you"
 const DONE_EXPIRE_MS = config.doneExpireHours * 60 * 60 * 1000; // merged/abandoned cards auto-drop after this
 
 function titleFromBranch(branch) {
-  return (branch || "").replace(/^TIP-\d+-/i, "").replace(/[-_]+/g, " ").trim() || branch || "(no title)";
+  // Strip a leading JIRA-style ticket key (e.g. "ABC-123-") if present, then turn
+  // separators into spaces. Host- and team-neutral: no hardcoded project prefix.
+  return (branch || "").replace(/^[A-Za-z]+-\d+[-_]/, "").replace(/[-_]+/g, " ").trim() || branch || "(no title)";
 }
 
-// Deterministic notification: pipe a {title, message} payload to the shared
-// notify.ps1 (desktop toast always, ntfy phone push when configured). Fire-and-forget.
-const NOTIFY_PS1 = config.notifyPs1;
+// Deterministic notification, delegated to the cross-platform notifier (desktop toast
+// per OS + optional ntfy phone push). Fire-and-forget; never disturbs the poller.
 function fireNotify(title, message) {
-  try {
-    const child = spawn(
-      "powershell",
-      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", NOTIFY_PS1],
-      { detached: true, stdio: ["pipe", "ignore", "ignore"] }
-    );
-    child.stdin.write(JSON.stringify({ title, message }));
-    child.stdin.end();
-    child.unref();
-  } catch (e) { /* best-effort */ }
+  try { notify(title, message); } catch (e) { /* best-effort */ }
 }
 
 function buildDisplay(pr, d, nowIso) {
