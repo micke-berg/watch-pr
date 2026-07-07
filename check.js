@@ -30,6 +30,7 @@ const ROOT = __dirname;
 const STATE = path.join(ROOT, "state.json");
 const ME = provider.me; // your own comments are not "a reviewer waiting on you"
 const DONE_EXPIRE_MS = config.doneExpireHours * 60 * 60 * 1000; // merged/abandoned cards auto-drop after this
+const APPROVALS_PREFERRED = config.approvalsPreferred || 2; // the "ready to merge" nudge target
 
 function titleFromBranch(branch) {
   // Strip a leading JIRA-style ticket key (e.g. "ABC-123-") if present, then turn
@@ -85,7 +86,7 @@ function diffLoop(pr, d, nowIso) {
     // buildRaw token (keeps exact parity for pre-upgrade entries that have no lastCi
     // stored yet). Each provider is carried by the term that applies to it.
     ciFailed: d.ci === "failed" && pr.lastCi !== "failed" && pr.lastBuildStatus !== "rejected",
-    twoApprovals: d.approvals >= 2 && (pr.lastApprovalCount || 0) < 2 && !pr.readyNotified,
+    twoApprovals: d.approvals >= APPROVALS_PREFERRED && (pr.lastApprovalCount || 0) < APPROVALS_PREFERRED && !pr.readyNotified,
     changesRequested: d.changesRequested && !pr.lastChangesRequested,
     blockingComment: newComments.some((c) => c.unresolved && c.author && c.author !== ME),
     merged: d.prStatus === "completed" && !pr.mergeNotified,
@@ -153,7 +154,7 @@ async function refreshAll(state, opts) {
           // Deterministic, edge-triggered notifications (each fires once; the diff guards re-firing).
           const an = actionNeeded, t = pr.display.title;
           if (an.ciFailed)          fireNotify("CI failed", `#${pr.id} ${t}: build rejected`);
-          if (an.twoApprovals)      fireNotify("Ready to merge", `#${pr.id} ${t}: 2 approvals reached`);
+          if (an.twoApprovals)      fireNotify("Ready to merge", `#${pr.id} ${t}: ${APPROVALS_PREFERRED} approvals reached`);
           if (an.changesRequested)  fireNotify("Changes requested", `#${pr.id} ${t}: a reviewer is waiting on you`);
           if (an.blockingComment)   fireNotify("Review comment", `#${pr.id} ${t}: new reviewer comment`);
           if (an.merged)            fireNotify("PR merged", `#${pr.id} ${t}: merged`);

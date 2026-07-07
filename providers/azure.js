@@ -57,9 +57,12 @@ async function decodePr(id, repo) {
   ]);
 
   const reviewers = (show && show.reviewers) || [];
-  const approvers = reviewers.filter((r) => !r.isContainer && (r.vote === 10 || r.vote === 5));
+  // Exclude your own vote — your self-approval shouldn't count toward the bar, and this
+  // matches the GitHub adapter (which excludes login === me). Container = team/group reviewer.
+  const others = reviewers.filter((r) => !r.isContainer && (!ME || r.name !== ME));
+  const approvers = others.filter((r) => r.vote === 10 || r.vote === 5);
   // vote -5 (waiting for author) / -10 (rejected) = a reviewer is blocking / waiting on you
-  const blockers = reviewers.filter((r) => !r.isContainer && (r.vote === -5 || r.vote === -10));
+  const blockers = others.filter((r) => r.vote === -5 || r.vote === -10);
 
   const buildPolicy = (policies || []).find((p) => p.name === "Build");
   const buildRaw = buildPolicy ? buildPolicy.status : ""; // queued|running|approved|rejected|notApplicable|""

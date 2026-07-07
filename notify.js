@@ -16,9 +16,10 @@ const config = require("./config.js");
 
 const NOTIFY_PS1 = path.join(__dirname, "notify.ps1");
 
-// AppleScript string literal: wrap in quotes, escape backslash + quote.
+// AppleScript string literal: collapse newlines (a raw newline is a syntax error inside an
+// -e string and would drop the notification), then wrap in quotes and escape backslash + quote.
 function asAppleString(s) {
-  return '"' + String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+  return '"' + String(s == null ? "" : s).replace(/[\r\n]+/g, " ").replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
 }
 
 function desktop(title, message) {
