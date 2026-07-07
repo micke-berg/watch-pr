@@ -144,8 +144,18 @@ nothing else.
 
 ## Safety
 
-Read-only against your PR host — it only ever reads. It never writes to, votes on, or
-merges a PR. The `✕` / "Clear all" buttons only prune your local list.
+- **Read-only against your PR host** — it only ever reads. It never writes to, votes on, or
+  merges a PR. The `✕` / "Clear all" buttons only prune your local list.
+- **Local only** — the server binds to `127.0.0.1`. It also rejects requests whose `Host`
+  isn't a localhost name (blocks DNS-rebinding) and cross-origin requests to its
+  state-changing endpoints (blocks a random web page from driving it via CSRF).
+- **No secrets stored** — authentication is delegated to `az` / `gh`; watch-pr holds no
+  tokens. `config.json` and `state.json` are gitignored.
+- **Optional phone push leaves your machine** — if you set `ntfyTopic`, PR titles/ids are
+  POSTed to your ntfy server (default `ntfy.sh`). Leave it empty to keep everything local,
+  or self-host ntfy via `ntfyServer`.
+- **The conflict explainer is opt-in** — `/analyze-conflict` is disabled unless you set
+  `claudeExe`, and when enabled it runs a headless assistant scoped to read-only git.
 
 ## License
 

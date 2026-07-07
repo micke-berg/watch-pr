@@ -208,7 +208,7 @@ let checking = false;      // /check request in flight
 const analyses = {};       // pr.id -> { status, markdown?, error? }
 // presentation config (overridden by the server's /config; defaults keep the standalone
 // file looking right). Attribution + approval thresholds live here so nothing is hardcoded.
-let CFG = { builtBy: "Micke Berg", builtByUrl: "https://mickeberg.com", approvalsRequired: 1, approvalsPreferred: 2, defaultRepository: "frontend-monorepo" };
+let CFG = { builtBy: "", builtByUrl: "", approvalsRequired: 1, approvalsPreferred: 2, defaultRepository: "" };
 
 // ── card rendering ───────────────────────────────────────────────────────────
 function cardHtml(pr) {
@@ -235,7 +235,7 @@ function cardHtml(pr) {
   const ciWord = pr.ci === "none" ? "—" : pr.ci;
   const ciSub = pr.ci === "passed" ? "all checks green" : pr.ci === "running" ? "in progress" : pr.ci === "none" ? "no build policy" : "checks failing";
 
-  // Avarda: 1 approval is mergeable (green), 2 preferred, more is fine. Show the absolute
+  // Approval bar is configurable (approvalsRequired / approvalsPreferred). Show the absolute
   // count + a ✓ once required is met; the sub-line teaches the bar when there are none yet.
   const req = CFG.approvalsRequired, pref = CFG.approvalsPreferred;
   const apprMet = pr.approvals >= req;

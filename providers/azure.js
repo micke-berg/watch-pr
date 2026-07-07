@@ -34,9 +34,22 @@ function az(argsStr) {
   });
 }
 
+// The `az` calls below run through a shell (az is a .cmd), so id and repository are
+// interpolated into a command line. Validate them against a strict whitelist first — this
+// is the trust boundary that stops shell-metacharacter injection from an untrusted repo/id
+// (e.g. a CSRF POST to /watch?repo=...). project comes from local (trusted) config.
+function assertSafeId(id) {
+  if (!/^\d+$/.test(String(id))) throw new Error("PR id must be numeric");
+}
+function assertSafeRepo(repo) {
+  if (!/^[A-Za-z0-9._/ -]+$/.test(String(repo))) throw new Error("invalid repository name");
+}
+
 // Fresh read of one PR from Azure. Returns decoded primitives + the human comment threads.
 async function decodePr(id, repo) {
   const repository = repo || config.defaultRepository;
+  assertSafeId(id);
+  assertSafeRepo(repository);
   const [show, policies, threads] = await Promise.all([
     az(`repos pr show --id ${id} --query "{status:status, mergeStatus:mergeStatus, isDraft:isDraft, createdAt:creationDate, title:title, sourceRef:sourceRefName, targetRef:targetRefName, reviewers:reviewers[].{name:displayName, vote:vote, isContainer:isContainer}}" -o json`),
     az(`repos pr policy list --id ${id} --query "[].{name:configuration.type.displayName, status:status}" -o json`),

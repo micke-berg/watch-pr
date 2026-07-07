@@ -198,9 +198,32 @@ function handleConfig(res) {
 
 pollTick(); // kick immediately: does the first tidy + poll, then self-schedules
 
+// The server binds to 127.0.0.1, but a browser on this machine can still reach it — so
+// two guards keep a malicious web page from driving it:
+//   hostAllowed  — the Host header must be a localhost name. Blocks DNS-rebinding, where
+//                  an attacker domain resolves to 127.0.0.1 and its page talks to us.
+//   sameOrigin   — a cross-origin request that carries an Origin header is rejected on the
+//                  state-changing endpoints. Blocks CSRF (a page POSTing to localhost).
+// Local CLI use (curl, the Claude skill) sends no Origin and is unaffected.
+function hostAllowed(req) {
+  const host = (req.headers.host || "").toLowerCase();
+  return /^(localhost|127\.0\.0\.1|\[::1\]|::1)(:\d+)?$/.test(host);
+}
+function sameOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true; // no Origin => not a browser cross-site request
+  try {
+    const h = new URL(origin).hostname;
+    return h === "localhost" || h === "127.0.0.1" || h === "::1";
+  } catch (e) { return false; } // malformed Origin => treat as hostile
+}
+const MUTATING = new Set(["/check", "/watch", "/dismiss", "/clear-done", "/analyze-conflict"]);
+
 http
   .createServer((req, res) => {
+    if (!hostAllowed(req)) { res.writeHead(403); return res.end("forbidden host"); }
     const url = req.url.split("?")[0];
+    if (MUTATING.has(url) && !sameOrigin(req)) { res.writeHead(403); return res.end("cross-origin blocked"); }
     if (url === "/status") return handleStatus(res);
     if (url === "/config") return handleConfig(res);
     if (url === "/check") return handleCheck(res);
@@ -218,10 +241,13 @@ http
     }
     if (url === "/clear-done") return handleClearDone(res);
 
-    let rel = decodeURIComponent(url);
+    let rel;
+    try { rel = decodeURIComponent(url); } catch (e) { res.writeHead(400); return res.end("bad request"); }
     if (rel === "/") rel = "/index.html";
-    const file = path.join(ROOT, rel);
-    if (!file.startsWith(ROOT)) {
+    const file = path.normalize(path.join(ROOT, rel));
+    // Must resolve to a file strictly inside ROOT. ROOT + path.sep (not bare ROOT) so a
+    // sibling dir whose name merely starts with ROOT can't be served.
+    if (file !== ROOT && !file.startsWith(ROOT + path.sep)) {
       res.writeHead(403);
       return res.end("forbidden");
     }
