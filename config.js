@@ -6,14 +6,25 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
+// Defaults are generic and host-neutral — nothing organization-specific ships here.
+// Real values live in config.json (copy config.example.json → config.json).
 const DEFAULTS = {
-  azCliPath: "C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\wbin\\az.cmd", // full path to az.cmd
-  organization: "https://dev.azure.com/avardaonline", // az default org (for PR web URLs)
-  project: "Online",                                   // az default project
-  defaultRepository: "frontend-monorepo",              // used when a watched PR carries no repository
-  me: "",                                              // your Azure display name — your own comments never ping you
-  notifyPs1: path.join(os.homedir(), ".claude", "hooks", "notify.ps1"), // desktop/phone notifier
-  claudeExe: "",                                       // full path to claude.exe for /analyze-conflict; empty disables it
+  provider: "azure",                                   // which PR host to talk to: "azure" | "github"
+  // --- Azure DevOps ---
+  azCliPath: process.platform === "win32"              // path to the az CLI
+    ? "C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\wbin\\az.cmd"
+    : "az",
+  organization: "",                                    // az default org, e.g. https://dev.azure.com/your-org
+  project: "",                                         // az default project
+  // --- GitHub ---
+  ghCliPath: "",                                       // path to gh CLI; empty = "gh" (or "gh.exe" on Windows) on PATH
+  // --- shared ---
+  defaultRepository: "",                               // used when a watched PR carries no repository
+                                                       //   azure: "repo"; github: "owner/repo"
+  me: "",                                              // your identity (Azure display name / GitHub login); your own
+                                                       //   comments never ping you. GitHub resolves it from gh if empty.
+  notifyPs1: path.join(os.homedir(), ".claude", "hooks", "notify.ps1"), // desktop/phone notifier (Windows)
+  claudeExe: "",                                       // full path to claude CLI for /analyze-conflict; empty disables it
   mainRepoDir: "",                                     // git-dir fallback when a PR's worktree is gone
   port: 7878,                                          // dashboard/server port (PR_WATCH_PORT env overrides)
   doneExpireHours: 24,                                 // merged/abandoned cards auto-drop after this

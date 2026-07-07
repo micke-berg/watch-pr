@@ -21,9 +21,11 @@ const { spawn } = require("child_process");
 
 const config = require("./config.js");
 // The provider adapter is the seam: it produces the neutral decoded shape and the PR
-// web URL, and carries the "me" identity. (Config-driven selection is a later step;
-// for now the only adapter is Azure.)
-const provider = require("./providers/azure.js");
+// web URL, and carries the "me" identity. Which adapter loads is config-driven, so the
+// core stays completely host-agnostic. The map is a whitelist so config can't require
+// an arbitrary path.
+const PROVIDERS = { azure: "./providers/azure.js", github: "./providers/github.js" };
+const provider = require(PROVIDERS[config.provider] || PROVIDERS.azure);
 const ROOT = __dirname;
 const STATE = path.join(ROOT, "state.json");
 const ME = provider.me; // your own comments are not "a reviewer waiting on you"
@@ -87,7 +89,10 @@ function diffLoop(pr, d, nowIso) {
   };
 
   const actionNeeded = {
-    ciFailed: d.ci === "failed" && pr.lastBuildStatus !== "rejected",
+    // Fire once. Guard on the normalized ci (works for every provider) AND the Azure
+    // buildRaw token (keeps exact parity for pre-upgrade entries that have no lastCi
+    // stored yet). Each provider is carried by the term that applies to it.
+    ciFailed: d.ci === "failed" && pr.lastCi !== "failed" && pr.lastBuildStatus !== "rejected",
     twoApprovals: d.approvals >= 2 && (pr.lastApprovalCount || 0) < 2 && !pr.readyNotified,
     changesRequested: d.changesRequested && !pr.lastChangesRequested,
     blockingComment: newComments.some((c) => c.unresolved && c.author && c.author !== ME),
@@ -95,7 +100,7 @@ function diffLoop(pr, d, nowIso) {
   };
 
   const phase = (d.prStatus === "completed" || d.prStatus === "abandoned") ? "done"
-    : (d.buildRaw === "queued" || d.buildRaw === "running") ? "ci" : "review";
+    : (d.ci === "queued" || d.ci === "running") ? "ci" : "review";
 
   const nextSeen = {};
   d.threads.forEach((t) => { if (t.updated) nextSeen[t.id] = t.updated; });
@@ -105,6 +110,7 @@ function diffLoop(pr, d, nowIso) {
     doneAt: pr.doneAt || (phase === "done" ? nowIso : ""),
     lastApprovalCount: d.approvals,
     lastBuildStatus: d.buildRaw,
+    lastCi: d.ci,
     lastMergeStatus: d.mergeStatus,
     lastChangesRequested: d.changesRequested,
     seenThreads: nextSeen,
@@ -241,7 +247,7 @@ async function registerPr(id, repo) {
   const d = await provider.decodePr(Number(id), repository); // throws if the PR can't be read
   const nowIso = new Date().toISOString();
   const phase = (d.prStatus === "completed" || d.prStatus === "abandoned") ? "done"
-    : (d.buildRaw === "queued" || d.buildRaw === "running") ? "ci" : "review";
+    : (d.ci === "queued" || d.ci === "running") ? "ci" : "review";
 
   const seenThreads = {};
   (d.threads || []).forEach((t) => { if (t.updated) seenThreads[t.id] = t.updated; });
@@ -256,6 +262,7 @@ async function registerPr(id, repo) {
     phase,
     lastApprovalCount: d.approvals,
     lastBuildStatus: d.buildRaw,
+    lastCi: d.ci,
     lastMergeStatus: d.mergeStatus,
     lastChangesRequested: d.changesRequested,
     seenThreads,
