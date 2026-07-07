@@ -102,10 +102,12 @@ function analyzePrompt(pr, gitdir) {
     `PR #${pr.id}: branch "${pr.branch}" merging into "${target}".`,
     `Git working directory: ${gitdir}`,
     "",
+    "You are already running in that directory — use plain git commands (no -C, no cd).",
+    "",
     "Steps (read-only only):",
-    `1. git -C "${gitdir}" fetch origin "${target}" "${pr.branch}"`,
-    `2. git -C "${gitdir}" merge-tree --write-tree --name-only "origin/${target}" "origin/${pr.branch}" — exit 1 means conflicts (first output line is the merged-tree OID, the remaining lines are the conflicting paths); exit 0 means it merges clean, so say the dashboard may be stale and stop.`,
-    `3. For each conflicting file: find the merge base (git -C "${gitdir}" merge-base "origin/${target}" "origin/${pr.branch}"), see what each side changed (git -C "${gitdir}" diff <base>..origin/<ref> -- <file>) and the conflicted region (git -C "${gitdir}" show <oid>:<file>).`,
+    `1. git fetch origin "${target}" "${pr.branch}"`,
+    `2. git merge-tree --write-tree --name-only "origin/${target}" "origin/${pr.branch}" — exit 1 means conflicts (first output line is the merged-tree OID, the remaining lines are the conflicting paths); exit 0 means it merges clean, so say the dashboard may be stale and stop.`,
+    `3. For each conflicting file: find the merge base (git merge-base "origin/${target}" "origin/${pr.branch}"), see what each side changed (git diff <base>..origin/<ref> -- <file>) and the conflicted region (git show <oid>:<file>).`,
     "4. Report per file: what the target changed, what the PR changed, why they collide, a class (trivial / semantic / structural), and how to resolve it. Then give one overall strategy and the concrete commands for the user to run themselves. Call out when a rebase plus re-running a codemod beats a hand-merge.",
     "",
     "Do NOT modify any repository, branch, index, or working tree. Use only read-only git (fetch, merge-base, merge-tree, diff, show, log). Output the analysis as Markdown.",
@@ -125,8 +127,12 @@ function handleAnalyze(res, id) {
   analyzing.add(String(id));
 
   // shell:false + args array + prompt over stdin => nothing to escape, and no .cmd/shell
-  // quirks. Tools are scoped to read-only git plus the read tools, nothing that writes.
-  const child = spawn(CLAUDE, ["-p", "--allowedTools", "Bash(git *) Read Grep Glob", "--output-format", "text"], {
+  // quirks. Tools are scoped to a read-only *subset* of git (the child runs with cwd set
+  // to the repo, so no `git -C` is needed) plus the read tools — this way a prompt-injected
+  // branch name can't steer the model into git push/reset/checkout/commit.
+  const READONLY_GIT = ["fetch", "merge-base", "merge-tree", "diff", "show", "log", "rev-parse", "status"]
+    .map((sub) => `Bash(git ${sub}:*)`).join(" ");
+  const child = spawn(CLAUDE, ["-p", "--allowedTools", `${READONLY_GIT} Read Grep Glob`, "--output-format", "text"], {
     cwd: gitdir, windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
   });
   let out = "", err = "";
@@ -199,31 +205,42 @@ function handleConfig(res) {
 pollTick(); // kick immediately: does the first tidy + poll, then self-schedules
 
 // The server binds to 127.0.0.1, but a browser on this machine can still reach it — so
-// two guards keep a malicious web page from driving it:
+// these guards keep a malicious web page from driving it:
 //   hostAllowed  — the Host header must be a localhost name. Blocks DNS-rebinding, where
 //                  an attacker domain resolves to 127.0.0.1 and its page talks to us.
-//   sameOrigin   — a cross-origin request that carries an Origin header is rejected on the
-//                  state-changing endpoints. Blocks CSRF (a page POSTing to localhost).
-// Local CLI use (curl, the Claude skill) sends no Origin and is unaffected.
+//   csrfSafe     — the state-changing endpoints must be POST and must not be a cross-site
+//                  browser request. A cross-origin fetch/form sends Origin; a sub-resource
+//                  GET (<img>/<script>) sends no Origin but does send Sec-Fetch-Site, so we
+//                  check both and also require POST (which <img>/<script> can't issue).
+// Local CLI use (curl, the Claude skill) sends neither header and is unaffected.
 function hostAllowed(req) {
   const host = (req.headers.host || "").toLowerCase();
   return /^(localhost|127\.0\.0\.1|\[::1\]|::1)(:\d+)?$/.test(host);
 }
-function sameOrigin(req) {
+function csrfSafe(req) {
+  if (req.method !== "POST") return false; // mutations are POST-only; blocks <img>/GET CSRF
+  const site = req.headers["sec-fetch-site"];
+  if (site && site !== "same-origin" && site !== "none") return false; // cross-site browser req
   const origin = req.headers.origin;
-  if (!origin) return true; // no Origin => not a browser cross-site request
-  try {
-    const h = new URL(origin).hostname;
-    return h === "localhost" || h === "127.0.0.1" || h === "::1";
-  } catch (e) { return false; } // malformed Origin => treat as hostile
+  if (origin) {
+    try {
+      const h = new URL(origin).hostname;
+      if (!(h === "localhost" || h === "127.0.0.1" || h === "::1")) return false;
+    } catch (e) { return false; } // malformed Origin => hostile
+  }
+  return true;
 }
 const MUTATING = new Set(["/check", "/watch", "/dismiss", "/clear-done", "/analyze-conflict"]);
+// Never serve these via the static handler even though they live in ROOT — config.json
+// holds the ntfyTopic + local paths; the dashboard uses the /config endpoint for the safe
+// subset. (state.json is intentionally served: it is the dashboard's data feed.)
+const BLOCKED_FILES = new Set(["config.json", "notify.config.json"]);
 
 http
   .createServer((req, res) => {
     if (!hostAllowed(req)) { res.writeHead(403); return res.end("forbidden host"); }
     const url = req.url.split("?")[0];
-    if (MUTATING.has(url) && !sameOrigin(req)) { res.writeHead(403); return res.end("cross-origin blocked"); }
+    if (MUTATING.has(url) && !csrfSafe(req)) { res.writeHead(403); return res.end("blocked"); }
     if (url === "/status") return handleStatus(res);
     if (url === "/config") return handleConfig(res);
     if (url === "/check") return handleCheck(res);
@@ -250,6 +267,10 @@ http
     if (file !== ROOT && !file.startsWith(ROOT + path.sep)) {
       res.writeHead(403);
       return res.end("forbidden");
+    }
+    if (BLOCKED_FILES.has(path.basename(file).toLowerCase())) {
+      res.writeHead(404); // don't confirm the file even exists
+      return res.end("not found");
     }
     fs.readFile(file, (err, data) => {
       if (err) {
