@@ -1,0 +1,26 @@
+{
+  "name": "watch-pr",
+  "version": "0.1.0",
+  "description": "Local, read-only pull-request watcher with a live dashboard and quiet, edge-triggered desktop/phone notifications. Provider-agnostic (Azure DevOps, GitHub) via a small adapter seam. Zero runtime dependencies — pure Node stdlib plus your host's CLI (az / gh).",
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node check.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "author": "Micke Berg (https://mickeberg.com)",
+  "keywords": [
+    "pull-request",
+    "code-review",
+    "azure-devops",
+    "github",
+    "dashboard",
+    "notifications",
+    "cli",
+    "zero-dependency"
+  ]
+}

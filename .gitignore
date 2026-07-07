@@ -1,0 +1,9 @@
+# machine/user-specific — copy config.example.json -> config.json and fill it in
+config.json
+# runtime state (the local watch list + per-PR snapshots)
+state.json
+# optional notifier settings (ntfy topic etc.)
+notify.config.json
+# logs / deps
+server.log
+node_modules/
