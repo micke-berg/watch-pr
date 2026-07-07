@@ -1,17 +1,27 @@
 {
+  "provider": "github",
+
+  "_comment_github": "provider=github uses the gh CLI (run `gh auth login` once). Repos are owner/repo. me is resolved from gh if left empty.",
+  "defaultRepository": "your-org/your-repo",
+  "me": "",
+  "ghCliPath": "",
+
+  "_comment_azure": "For provider=azure instead, set these (repos are just the repo name) and run `az login`.",
   "azCliPath": "C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\wbin\\az.cmd",
   "organization": "https://dev.azure.com/YOUR-ORG",
   "project": "YOUR-PROJECT",
-  "defaultRepository": "your-default-repo",
-  "me": "Your Azure Display Name",
-  "notifyPs1": "C:\\Users\\YOU\\.claude\\hooks\\notify.ps1",
-  "claudeExe": "C:\\path\\to\\@anthropic-ai\\claude-code\\bin\\claude.exe",
-  "mainRepoDir": "C:\\path\\to\\your\\repo",
-  "port": 7878,
-  "doneExpireHours": 24,
+
+  "_comment_shared": "Everything below is provider-agnostic.",
   "approvalsRequired": 1,
   "approvalsPreferred": 2,
+  "port": 7878,
+  "doneExpireHours": 24,
+  "cadence": { "ciSeconds": 300, "reviewSeconds": 1500 },
+
+  "notifyPs1": "C:\\Users\\YOU\\.claude\\hooks\\notify.ps1",
+  "claudeExe": "",
+  "mainRepoDir": "",
+
   "builtBy": "Your Name",
-  "builtByUrl": "https://your-site.example",
-  "cadence": { "ciSeconds": 300, "reviewSeconds": 1500 }
+  "builtByUrl": "https://your-site.example"
 }
