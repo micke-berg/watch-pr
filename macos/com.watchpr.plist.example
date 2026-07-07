@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS always-on LaunchAgent for watch-pr (the mac analog of pr-watch-service.vbs).
+
+  Setup:
+    1. Find your node path:   which node      (e.g. /opt/homebrew/bin/node, or an nvm path)
+    2. Copy this file to:     ~/Library/LaunchAgents/com.watchpr.plist
+    3. Replace NODE_PATH and the two /ABSOLUTE/PATH/TO/watch-pr placeholders with real paths.
+    4. Load it:               launchctl load ~/Library/LaunchAgents/com.watchpr.plist
+       (to stop:              launchctl unload ~/Library/LaunchAgents/com.watchpr.plist)
+
+  It runs at login and is kept alive; an empty watch list makes zero network calls.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.watchpr</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>NODE_PATH</string>
+    <string>/ABSOLUTE/PATH/TO/watch-pr/server.js</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/ABSOLUTE/PATH/TO/watch-pr</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/watch-pr.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/watch-pr.err</string>
+</dict>
+</plist>
