@@ -202,8 +202,6 @@ function handleConfig(res) {
   });
 }
 
-pollTick(); // kick immediately: does the first tidy + poll, then self-schedules
-
 // The server binds to 127.0.0.1, but a browser on this machine can still reach it — so
 // these guards keep a malicious web page from driving it:
 //   hostAllowed  — the Host header must be a localhost name. Blocks DNS-rebinding, where
@@ -236,54 +234,64 @@ const MUTATING = new Set(["/check", "/watch", "/dismiss", "/clear-done", "/analy
 // subset. (state.json is intentionally served: it is the dashboard's data feed.)
 const BLOCKED_FILES = new Set(["config.json", "notify.config.json"]);
 
-http
-  .createServer((req, res) => {
-    if (!hostAllowed(req)) { res.writeHead(403); return res.end("forbidden host"); }
-    const url = req.url.split("?")[0];
-    if (MUTATING.has(url) && !csrfSafe(req)) { res.writeHead(403); return res.end("blocked"); }
-    if (url === "/status") return handleStatus(res);
-    if (url === "/config") return handleConfig(res);
-    if (url === "/check") return handleCheck(res);
-    if (url === "/analyze-conflict") {
-      const q = new URLSearchParams(req.url.split("?")[1] || "");
-      return handleAnalyze(res, q.get("id"));
-    }
-    if (url === "/dismiss") {
-      const q = new URLSearchParams(req.url.split("?")[1] || "");
-      return handleDismiss(res, q.get("id"));
-    }
-    if (url === "/watch") {
-      const q = new URLSearchParams(req.url.split("?")[1] || "");
-      return handleWatch(res, q.get("id"), q.get("repo"));
-    }
-    if (url === "/clear-done") return handleClearDone(res);
+// Resolve a request URL to a servable file under ROOT, or an error status. Pure and
+// exported so the path-traversal / blocked-file rules are unit-testable without a socket.
+function staticFileFor(rawUrl) {
+  const urlPath = String(rawUrl || "").split("?")[0];
+  let rel;
+  try { rel = decodeURIComponent(urlPath); } catch (e) { return { status: 400 }; }
+  if (rel === "/") rel = "/index.html";
+  const file = path.normalize(path.join(ROOT, rel));
+  // Must resolve strictly inside ROOT. ROOT + path.sep (not bare ROOT) so a sibling dir
+  // whose name merely starts with ROOT can't be served.
+  if (file !== ROOT && !file.startsWith(ROOT + path.sep)) return { status: 403 };
+  if (BLOCKED_FILES.has(path.basename(file).toLowerCase())) return { status: 404 };
+  return { status: 200, file };
+}
 
-    let rel;
-    try { rel = decodeURIComponent(url); } catch (e) { res.writeHead(400); return res.end("bad request"); }
-    if (rel === "/") rel = "/index.html";
-    const file = path.normalize(path.join(ROOT, rel));
-    // Must resolve to a file strictly inside ROOT. ROOT + path.sep (not bare ROOT) so a
-    // sibling dir whose name merely starts with ROOT can't be served.
-    if (file !== ROOT && !file.startsWith(ROOT + path.sep)) {
-      res.writeHead(403);
-      return res.end("forbidden");
-    }
-    if (BLOCKED_FILES.has(path.basename(file).toLowerCase())) {
-      res.writeHead(404); // don't confirm the file even exists
-      return res.end("not found");
-    }
-    fs.readFile(file, (err, data) => {
-      if (err) {
-        res.writeHead(404);
-        return res.end("not found");
-      }
-      res.writeHead(200, {
-        "Content-Type": TYPES[path.extname(file)] || "application/octet-stream",
-        "Cache-Control": "no-store",
-      });
-      res.end(data);
+function requestHandler(req, res) {
+  if (!hostAllowed(req)) { res.writeHead(403); return res.end("forbidden host"); }
+  const url = req.url.split("?")[0];
+  if (MUTATING.has(url) && !csrfSafe(req)) { res.writeHead(403); return res.end("blocked"); }
+  if (url === "/status") return handleStatus(res);
+  if (url === "/config") return handleConfig(res);
+  if (url === "/check") return handleCheck(res);
+  if (url === "/analyze-conflict") {
+    const q = new URLSearchParams(req.url.split("?")[1] || "");
+    return handleAnalyze(res, q.get("id"));
+  }
+  if (url === "/dismiss") {
+    const q = new URLSearchParams(req.url.split("?")[1] || "");
+    return handleDismiss(res, q.get("id"));
+  }
+  if (url === "/watch") {
+    const q = new URLSearchParams(req.url.split("?")[1] || "");
+    return handleWatch(res, q.get("id"), q.get("repo"));
+  }
+  if (url === "/clear-done") return handleClearDone(res);
+
+  const resolved = staticFileFor(req.url);
+  if (resolved.status !== 200) {
+    res.writeHead(resolved.status);
+    return res.end(resolved.status === 400 ? "bad request" : resolved.status === 403 ? "forbidden" : "not found");
+  }
+  fs.readFile(resolved.file, (err, data) => {
+    if (err) { res.writeHead(404); return res.end("not found"); }
+    res.writeHead(200, {
+      "Content-Type": TYPES[path.extname(resolved.file)] || "application/octet-stream",
+      "Cache-Control": "no-store",
     });
-  })
-  .listen(PORT, "127.0.0.1", () =>
+    res.end(data);
+  });
+}
+
+// Only start the server + resident poller when run directly (node server.js). When
+// required by a test, the module just exposes its functions with no side effects.
+if (require.main === module) {
+  pollTick(); // kick immediately: first tidy + poll, then self-schedules
+  http.createServer(requestHandler).listen(PORT, "127.0.0.1", () =>
     console.log(`watch-pr dashboard → http://localhost:${PORT}`)
   );
+}
+
+module.exports = { hostAllowed, csrfSafe, staticFileFor, requestHandler };
