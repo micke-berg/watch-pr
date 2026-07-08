@@ -157,6 +157,10 @@ nothing else.
 - **The conflict explainer is opt-in** — `/analyze-conflict` is disabled unless you set
   `claudeExe`, and when enabled it runs a headless assistant scoped to read-only git.
 
+## Credits
+
+Built by [Micke Berg](https://mickeberg.com).
+
 ## License
 
 MIT.

@@ -208,7 +208,7 @@ let checking = false;      // /check request in flight
 const analyses = {};       // pr.id -> { status, markdown?, error? }
 // presentation config (overridden by the server's /config; defaults keep the standalone
 // file looking right). Attribution + approval thresholds live here so nothing is hardcoded.
-let CFG = { builtBy: "", builtByUrl: "", approvalsRequired: 1, approvalsPreferred: 2, defaultRepository: "" };
+let CFG = { builtBy: "Micke Berg", builtByUrl: "https://mickeberg.com", approvalsRequired: 1, approvalsPreferred: 2, defaultRepository: "" };
 
 // ── card rendering ───────────────────────────────────────────────────────────
 function cardHtml(pr) {
