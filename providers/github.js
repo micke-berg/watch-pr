@@ -162,4 +162,4 @@ async function listMyOpenPrs() {
   })).filter((r) => r.repo);
 }
 
-module.exports = { me: ME, prUrl, decodePr, listMyOpenPrs };
+module.exports = { me: ME, prUrl, decodePr, listMyOpenPrs, deriveCi, mapPrStatus };

@@ -107,4 +107,4 @@ async function decodePr(id, repo) {
   };
 }
 
-module.exports = { me: ME, prUrl, decodePr };
+module.exports = { me: ME, prUrl, decodePr, assertSafeId, assertSafeRepo };

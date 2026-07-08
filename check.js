@@ -272,8 +272,9 @@ async function registerPr(id, repo) {
 }
 
 // decodePr is re-exported from the active provider so existing importers (and the
-// parity harness) keep the same surface after the seam extraction.
-module.exports = { runCheck, refreshAll, decodePr: provider.decodePr, pruneDone, pollIfDue, registerPr };
+// parity harness) keep the same surface after the seam extraction. diffLoop and
+// titleFromBranch are exported for unit tests (pure functions).
+module.exports = { runCheck, refreshAll, decodePr: provider.decodePr, pruneDone, pollIfDue, registerPr, diffLoop, titleFromBranch };
 
 // CLI
 if (require.main === module) {

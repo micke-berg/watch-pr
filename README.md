@@ -1,5 +1,7 @@
 # watch-pr — a local, read-only PR dashboard + watcher
 
+[![CI](https://github.com/micke-berg/watch-pr/actions/workflows/ci.yml/badge.svg)](https://github.com/micke-berg/watch-pr/actions/workflows/ci.yml)
+
 A personal command center for your open pull requests. It runs entirely on your machine,
 polls each watched PR, and shows one glanceable dashboard — so you can tell at a glance
 whether anything needs you, without living in the PR web UI. It fires a desktop (and
@@ -49,7 +51,7 @@ Node plus your host's own CLI (`az` / `gh`).
    **GitHub** (`"provider": "github"`) — repos are `owner/repo`:
 
    | key | what |
-   |-----|------|
+   | --- | --- |
    | `provider` | `"github"` |
    | `defaultRepository` | `owner/repo` used when a watched PR doesn't specify one |
    | `me` | your GitHub login; leave empty to auto-resolve via `gh api user` |
@@ -58,7 +60,7 @@ Node plus your host's own CLI (`az` / `gh`).
    **Azure DevOps** (`"provider": "azure"`) — repos are just the repo name:
 
    | key | what |
-   |-----|------|
+   | --- | --- |
    | `provider` | `"azure"` |
    | `organization` / `project` | your Azure DevOps org URL + project |
    | `defaultRepository` | repo used when a watched PR doesn't specify one |
@@ -68,7 +70,7 @@ Node plus your host's own CLI (`az` / `gh`).
    Shared (both providers):
 
    | key | what |
-   |-----|------|
+   | --- | --- |
    | `approvalsRequired` / `approvalsPreferred` | your team's approval bar |
    | `ntfyTopic` / `ntfyServer` | optional phone push (see Notifications) |
    | `port` | dashboard port (default 7878) |
@@ -112,7 +114,7 @@ Keep it running from every login. An empty watch list makes zero network calls, 
 ## Files
 
 | file | role |
-|------|------|
+| --- | --- |
 | `index.html` | the dashboard (pure presentation; reads `state.json` + the endpoints) |
 | `check.js` | provider-agnostic poll + decode core + the notify/tidy/add-PR loop |
 | `providers/azure.js`, `providers/github.js` | the host adapters (the only host-specific code) |
@@ -122,6 +124,10 @@ Keep it running from every login. An empty watch list makes zero network calls, 
 | `state.json` | the watch list + per-PR snapshot the dashboard renders |
 | `pr-watch-service.vbs` / `dashboard.cmd` / `dashboard.sh` / `macos/…plist` | launchers |
 
+The dashboard is deliberately a single self-contained `index.html` — inline CSS/JS, no
+build step and no front-end dependencies — so it stays zero-install and auditable in one
+file. That constraint is a feature, not a shortcut.
+
 Endpoints (all local): `/status`, `/config`, `POST /check`, `POST /watch?id=&repo=`,
 `POST /dismiss?id=`, `POST /clear-done`, `POST /analyze-conflict?id=`.
 
@@ -129,7 +135,7 @@ Endpoints (all local): `/status`, `/config`, `POST /check`, `POST /watch?id=&rep
 
 Everything above a small **neutral contract** is host-agnostic. An adapter only implements:
 
-```
+```text
 provider.me                       // your identity (own comments never ping you)
 provider.prUrl(repo, id)          // web URL for a PR
 provider.decodePr(id, repo)       // -> the neutral decoded shape (status, ci, approvals, threads, …)
@@ -156,6 +162,16 @@ nothing else.
   or self-host ntfy via `ntfyServer`.
 - **The conflict explainer is opt-in** — `/analyze-conflict` is disabled unless you set
   `claudeExe`, and when enabled it runs a headless assistant scoped to read-only git.
+
+## Tests
+
+```sh
+npm test        # = node --test  (Node's built-in runner, no dependencies)
+```
+
+Covers the CI-status derivation, the edge-triggered notification logic, the input
+validation, and the server's security guards. CI runs the suite on Windows, macOS, and
+Linux across Node 18 / 20 / 22.
 
 ## Credits
 
