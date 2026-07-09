@@ -73,6 +73,15 @@ test("isWatched: matches on id AND repo (ids are not unique across repos)", () =
   assert.equal(check.isWatched({}, 5, "owner/a"), false);       // no watching list
 });
 
+test("isWatched: a missing repository is a wildcard (dedups legacy/hand-edited entries)", () => {
+  // A stored entry with no repository still dedups against a discovered one — otherwise the
+  // discovery adds a second card for the same PR (the real duplicate bug this guards against).
+  assert.equal(check.isWatched({ watching: [{ id: 5 }] }, 5, "owner/a"), true);              // stored has no repo
+  assert.equal(check.isWatched({ watching: [{ id: 5, repository: "" }] }, 5, "owner/a"), true); // empty string too
+  assert.equal(check.isWatched({ watching: [{ id: 5, repository: "owner/a" }] }, 5, ""), true);  // query has no repo
+  assert.equal(check.isWatched({ watching: [{ id: 5, repository: "owner/a" }] }, 6, ""), false); // different id, still no match
+});
+
 test("dropStaleReviewers: clears reviewed/withdrawn review cards, keeps live + non-reviewer", () => {
   const watching = [
     { id: 1, repository: "o/a", role: "reviewer" },  // still requested -> keep
