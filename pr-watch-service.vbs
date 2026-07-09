@@ -6,11 +6,15 @@
 '
 ' It runs at login via a shortcut in shell:startup (Win+R -> shell:startup). To stop it,
 ' end the matching "node" process in Task Manager, or remove the startup shortcut.
+'
+' NODE resolves from PATH, which works for most installs (including nvm-for-Windows). If
+' your login PATH doesn't include node yet, set the absolute path from:
+'   node -e "console.log(process.execPath)"
+Const NODE = "node"
 Dim sh, fso, dir
 Set sh = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 dir = fso.GetParentFolderName(WScript.ScriptFullName)
 sh.CurrentDirectory = dir
-' Full node path so it works at login regardless of PATH timing. 0 = hidden window,
-' False = don't wait for it to exit (runs detached in the background).
-sh.Run Chr(34) & "C:\nvm4w\nodejs\node.exe" & Chr(34) & " " & Chr(34) & dir & "\server.js" & Chr(34), 0, False
+' 0 = hidden window, False = don't wait for it to exit (runs detached in the background).
+sh.Run Chr(34) & NODE & Chr(34) & " " & Chr(34) & dir & "\server.js" & Chr(34), 0, False
