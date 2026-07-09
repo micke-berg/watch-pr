@@ -120,6 +120,8 @@ phone push, and the full list of settings are in [Setup](#setup) and below.
    ```
    then open `http://localhost:7878` — or use `dashboard.cmd` (Windows) / `dashboard.sh` (macOS/Linux).
 
+   **Tip:** in Safari, **File → Add to Dock** gives you a one-click launcher with its own icon.
+
 ## Always-on (optional, one-time per OS)
 
 Keep it running from every login. An empty watch list makes zero network calls, so it's idle-cheap.
