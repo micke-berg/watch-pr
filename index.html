@@ -109,7 +109,9 @@ function esc(s) {
   return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 function titleFromBranch(branch) {
-  return (branch || "").replace(/^TIP-\d+-/i, "").replace(/[-_]+/g, " ").trim() || branch || "(no title)";
+  // Strip a leading JIRA-style ticket key (e.g. "ABC-123-"), host- and team-neutral —
+  // matches the same derivation in check.js. No hardcoded project prefix.
+  return (branch || "").replace(/^[A-Za-z]+-\d+[-_]/, "").replace(/[-_]+/g, " ").trim() || branch || "(no title)";
 }
 function agoSec(iso) {
   if (!iso) return null;
