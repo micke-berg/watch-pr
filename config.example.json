@@ -22,7 +22,7 @@
   "approvalsPreferred": 2,
   "port": 7878,
   "doneExpireHours": 24,
-  "cadence": { "ciSeconds": 300, "reviewSeconds": 1500 },
+  "cadence": { "ciSeconds": 120, "reviewSeconds": 300 },
 
   "_comment_notify": "Desktop notifications are automatic per-OS. For an optional phone push, set an ntfy topic (a long private string) and subscribe the ntfy app to it.",
   "ntfyTopic": "",
