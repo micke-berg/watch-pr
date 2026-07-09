@@ -12,6 +12,9 @@
   "project": "YOUR-PROJECT",
 
   "_comment_shared": "Everything below is provider-agnostic.",
+  "_comment_watchmine": "Set watchMine to true to auto-watch every open PR you authored across all repos (no manual adding). watchMineMaxAgeDays skips PRs older than N days so stale experiments don't clutter the board (0 = no limit). Manual adds are never filtered.",
+  "watchMine": false,
+  "watchMineMaxAgeDays": 30,
   "approvalsRequired": 1,
   "approvalsPreferred": 2,
   "port": 7878,
