@@ -200,7 +200,9 @@ show up the instant it's created.)
 
 | file | role |
 | --- | --- |
-| `index.html` | the dashboard (pure presentation; reads `state.json` + the endpoints) |
+| `index.html` | the dashboard markup + PWA head; loads `app.css` and `app.js` |
+| `app.css` | all styles, including both theme token sets |
+| `app.js` | all dashboard behavior (reads `state.json` + the endpoints) |
 | `check.js` | provider-agnostic poll + decode core + the notify/tidy/add-PR loop |
 | `providers/azure.js`, `providers/github.js` | the host adapters (the only host-specific code) |
 | `notify.js` / `notify.ps1` | cross-platform notifier (OS-detected) + the Windows toast helper |
@@ -209,9 +211,10 @@ show up the instant it's created.)
 | `state.json` | the watch list + per-PR snapshot the dashboard renders |
 | `pr-watch-service.vbs` / `dashboard.cmd` / `dashboard.sh` / `macos/…plist` / `linux/…service` | launchers |
 
-The dashboard is deliberately a single self-contained `index.html` — inline CSS/JS, no
-build step and no front-end dependencies — so it stays zero-install and auditable in one
-file. That constraint is a feature, not a shortcut.
+The dashboard is three plain static files — `index.html`, `app.css`, `app.js` — with no
+build step and no front-end dependencies. Nothing compiles or bundles them: the browser
+loads them as-is and the server sends them straight from disk. The whole front end stays
+zero-install and auditable by reading three files. That constraint is a feature, not a shortcut.
 
 Endpoints (all local): `/status`, `/config`, `POST /check`, `POST /watch?id=&repo=`,
 `POST /dismiss?id=&repo=`, `POST /clear-done`, `POST /analyze-conflict?id=&repo=`.
