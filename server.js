@@ -22,6 +22,7 @@ const TYPES = {
   ".png": "image/png",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
 };
 
 // /analyze-conflict spawns a fresh, read-only headless Claude to explain a PR's merge
