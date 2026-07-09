@@ -174,10 +174,10 @@ Keep it running from every login. An empty watch list makes zero network calls, 
 - Or set `"watchMine": true` to auto-watch every open PR you authored across all repos —
   no manual adding. New PRs are picked up on the poll cadence; `watchMineMaxAgeDays`
   (default 30) keeps stale ones off the board. Manually added PRs are never age-filtered.
-  *(GitHub only — the Azure adapter doesn't list your PRs yet.)*
+  *(GitHub spans every repo you can see; Azure covers your configured project.)*
 - Or set `"watchReviewRequests": true` to auto-watch every open PR waiting on your review.
   Each one shows a **review requested** card and clears itself once you've reviewed it.
-  *(GitHub only.)*
+  *(Works on both providers.)*
 - Or edit `state.json` directly.
 
 ## Fits an agentic workflow
