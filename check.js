@@ -30,6 +30,14 @@ const ROOT = __dirname;
 const STATE = path.join(ROOT, "state.json");
 const ME = provider.me; // your own comments are not "a reviewer waiting on you"
 
+// Discovery is opt-in and provider-dependent. Warn once at load if it's switched on but the
+// active provider can't do it yet (e.g. the azure adapter lists neither), so it doesn't just
+// silently no-op and leave someone wondering why nothing shows up.
+if (config.watchMine && typeof provider.listMyOpenPrs !== "function")
+  console.warn(`watch-pr: watchMine is on, but the "${config.provider}" provider can't list your PRs yet — it will do nothing.`);
+if (config.watchReviewRequests && typeof provider.listReviewRequestedPrs !== "function")
+  console.warn(`watch-pr: watchReviewRequests is on, but the "${config.provider}" provider can't list review requests yet — it will do nothing.`);
+
 // Read the local state file, tolerating first run: a fresh clone has no state.json
 // (it's gitignored), so a missing file is the empty watch list, not an error. Corrupt
 // JSON still throws — that's a real problem worth surfacing.
@@ -173,12 +181,17 @@ async function refreshAll(state, opts) {
           const { changes, actionNeeded, nextLoop, phase, hasChanges } = diffLoop(pr, d, nowIso);
           Object.assign(pr, nextLoop);
           // Deterministic, edge-triggered notifications (each fires once; the diff guards re-firing).
-          const an = actionNeeded, t = pr.display.title;
-          if (an.ciFailed)          fireNotify("CI failed", `#${pr.id} ${t}: build rejected`);
-          if (an.twoApprovals)      fireNotify("Ready to merge", `#${pr.id} ${t}: ${APPROVALS_PREFERRED} approvals reached`);
-          if (an.changesRequested)  fireNotify("Changes requested", `#${pr.id} ${t}: a reviewer is waiting on you`);
-          if (an.blockingComment)   fireNotify("Review comment", `#${pr.id} ${t}: new reviewer comment`);
-          if (an.merged)            fireNotify("PR merged", `#${pr.id} ${t}: merged`);
+          // These are author-centric (your CI, your approvals, your merge). For a PR that is only
+          // on your board because your review was requested, none of them are "yours to act on" —
+          // the single review-requested ping fired at discovery is enough — so stay quiet here.
+          if (pr.role !== "reviewer") {
+            const an = actionNeeded, t = pr.display.title;
+            if (an.ciFailed)          fireNotify("CI failed", `#${pr.id} ${t}: build rejected`);
+            if (an.twoApprovals)      fireNotify("Ready to merge", `#${pr.id} ${t}: ${APPROVALS_PREFERRED} approvals reached`);
+            if (an.changesRequested)  fireNotify("Changes requested", `#${pr.id} ${t}: a reviewer is waiting on you`);
+            if (an.blockingComment)   fireNotify("Review comment", `#${pr.id} ${t}: new reviewer comment`);
+            if (an.merged)            fireNotify("PR merged", `#${pr.id} ${t}: merged`);
+          }
           results.push({ id: pr.id, title: pr.display.title, phase, hasChanges, changes, actionNeeded, display: pr.display });
         } else {
           results.push({ id: pr.id, title: pr.display.title, display: pr.display });
@@ -230,9 +243,59 @@ async function syncMine(state) {
   return added;
 }
 
+// Drop reviewer-role cards that are no longer in the live review-requested set — i.e. you've
+// reviewed them (GitHub removes the request the moment you submit a review) or the request was
+// withdrawn. Author/manual cards are never touched. Pure, so it's unit-testable.
+function dropStaleReviewers(watching, liveKeys) {
+  return (watching || []).filter((p) => p.role !== "reviewer" || liveKeys.has(String(p.id) + "@" + p.repository));
+}
+
+// Auto-discovery for "watch PRs awaiting my review" (config.watchReviewRequests). Adds any
+// review-requested PR not already watched (tagged role:"reviewer", with a one-off "review
+// requested" ping), and reconciles the board so a card disappears once you've reviewed it.
+// Best-effort: a listing failure is swallowed and — crucially — does NOT prune, so a blip
+// never wipes your review queue. No-op unless enabled and the provider supports it.
+async function syncReviewRequests(state) {
+  if (!config.watchReviewRequests || typeof provider.listReviewRequestedPrs !== "function") return 0;
+  state.watching = state.watching || [];
+  let rows;
+  try { rows = await provider.listReviewRequestedPrs(); }
+  catch (e) { return 0; } // fetch failed → add nothing and prune nothing
+  const nowIso = new Date().toISOString();
+  const liveKeys = new Set();
+  let added = 0;
+  for (const row of rows || []) {
+    const repository = row.repo || config.defaultRepository;
+    if (!row.id || !repository) continue;
+    liveKeys.add(String(row.id) + "@" + repository);
+    if (isWatched(state, row.id, repository)) continue; // already on the board (any role)
+    try {
+      const d = await provider.decodePr(Number(row.id), repository);
+      const entry = makeEntry(row.id, repository, d, nowIso, "reviewer");
+      state.watching.push(entry);
+      fireNotify("Review requested", `#${row.id} ${entry.display.title}: your review was requested`);
+      added++;
+    } catch (e) { /* skip this PR; a later tick retries it */ }
+  }
+  const before = state.watching.length;
+  state.watching = dropStaleReviewers(state.watching, liveKeys); // you reviewed it / it was withdrawn
+  if (added || state.watching.length !== before) state.nextPollAt = "";
+  return added;
+}
+
+// Any discovery source enabled? Gates whether the poller reaches out on an empty board.
+function discoveryOn() {
+  return !!(config.watchMine || config.watchReviewRequests);
+}
+// Run every enabled discovery source, in place.
+async function discover(state) {
+  if (config.watchMine) await syncMine(state);
+  if (config.watchReviewRequests) await syncReviewRequests(state);
+}
+
 async function runCheck(opts) {
   const state = loadState();
-  if (config.watchMine) await syncMine(state);
+  if (discoveryOn()) await discover(state);
   const out = await refreshAll(state, opts);
   if (opts && opts.loop) {
     out.state.nextPollAt = out.suggestedDelaySeconds
@@ -255,18 +318,18 @@ async function pollIfDue(opts) {
   const now = Date.now();
   const due = force || !state.nextPollAt || now >= Date.parse(state.nextPollAt);
 
-  // Discover new PRs on the poll cadence, never on every heartbeat — so watch-all doesn't
+  // Discover new PRs on the poll cadence, never on every heartbeat — so discovery doesn't
   // turn an idle machine into a per-minute PR search. Runs only when a poll is due.
-  if (due && config.watchMine) await syncMine(state);
+  if (due && discoveryOn()) await discover(state);
 
   const active = (state.watching || []).filter((p) => p.phase !== "done");
 
   if (!active.length) {
     let changed = pruneDone(state) > 0;
-    // With watch-all on, keep re-checking for new PRs even while the list is empty, by
+    // With discovery on, keep re-checking for new PRs even while the list is empty, by
     // scheduling the next discovery on the review cadence (otherwise an empty list would
     // never poll again and the first PR would never be found).
-    if (due && config.watchMine) {
+    if (due && discoveryOn()) {
       state.nextPollAt = new Date(now + config.cadence.reviewSeconds * 1000).toISOString();
       changed = true;
     }
@@ -295,7 +358,7 @@ async function pollIfDue(opts) {
 // to the current situation so the PR does NOT fire notifications for its existing
 // CI/approval/comment state — only for future changes. Pure: no I/O, so both registerPr
 // (manual add) and syncMine (auto-discovery) can share it.
-function makeEntry(id, repository, d, nowIso) {
+function makeEntry(id, repository, d, nowIso, role) {
   const phase = phaseFor(d);
   const seenThreads = {};
   (d.threads || []).forEach((t) => { if (t.updated) seenThreads[t.id] = t.updated; });
@@ -303,6 +366,7 @@ function makeEntry(id, repository, d, nowIso) {
   const entry = {
     id: Number(id),
     repository,
+    role: role || "author", // "author" = a PR you opened; "reviewer" = one awaiting your review
     branch: d.branch || "",
     targetBranch: d.target || "",
     worktree: "",
@@ -354,7 +418,7 @@ async function registerPr(id, repo) {
 // decodePr is re-exported from the active provider so existing importers (and the
 // parity harness) keep the same surface after the seam extraction. diffLoop and
 // titleFromBranch are exported for unit tests (pure functions).
-module.exports = { runCheck, refreshAll, decodePr: provider.decodePr, pruneDone, pollIfDue, registerPr, syncMine, diffLoop, titleFromBranch, phaseFor, isWatched };
+module.exports = { runCheck, refreshAll, decodePr: provider.decodePr, pruneDone, pollIfDue, registerPr, syncMine, syncReviewRequests, dropStaleReviewers, diffLoop, titleFromBranch, phaseFor, isWatched };
 
 // CLI
 if (require.main === module) {
