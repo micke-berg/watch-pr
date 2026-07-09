@@ -407,8 +407,22 @@ function render() {
   document.getElementById("cards").innerHTML = prs.map(cardHtml).join("");
   document.getElementById("doneSection").innerHTML = doneSectionHtml(done);
   document.title = hero.needYou ? `🔴 watch-pr (${hero.needYou})` : "👀 watch-pr";
+  setFavicon(hero.needYou > 0);
 
   updateMeta(isSample);
+}
+
+// Ambient awareness: the favicon carries a red notification dot whenever something needs
+// you, so a pinned tab tells you at a glance without switching to it (pairs with the tab
+// title above). Cleared back to plain 👀 when nothing does.
+function setFavicon(alert) {
+  const link = document.querySelector("link[rel='icon']");
+  if (!link) return;
+  const eyes = "<text y='.9em' font-size='90'>👀</text>";
+  const dot = alert ? "<circle cx='80' cy='22' r='22' fill='#ff453a' stroke='#141117' stroke-width='7'/>" : "";
+  const svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>" + eyes + dot + "</svg>";
+  const href = "data:image/svg+xml," + encodeURIComponent(svg);
+  if (link.href !== href) link.href = href; // only touch the DOM when it actually changes
 }
 
 // header freshness, liveness dots, footer label + check button — cheap, runs every 1s
