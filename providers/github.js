@@ -152,13 +152,15 @@ async function decodePr(id, repo) {
   };
 }
 
-// Optional: every open PR I authored, as [{ id, repo }] — powers a "watch all my PRs"
-// mode with zero manual registration.
+// Optional: every open PR I authored, as [{ id, repo, createdAt }] — powers a "watch all
+// my PRs" mode with zero manual registration. createdAt lets the core skip stale PRs
+// before paying for a per-PR decode.
 async function listMyOpenPrs() {
-  const rows = await gh(["search", "prs", "--author", "@me", "--state", "open", "--json", "number,repository"]);
+  const rows = await gh(["search", "prs", "--author", "@me", "--state", "open", "--json", "number,repository,createdAt"]);
   return (rows || []).map((r) => ({
     id: r.number,
     repo: (r.repository && (r.repository.nameWithOwner || r.repository.name)) || "",
+    createdAt: r.createdAt || "",
   })).filter((r) => r.repo);
 }
 
