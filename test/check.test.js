@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const check = require("../check.js");
 
 test("titleFromBranch strips a JIRA-style key, leaves plain branches alone", () => {
-  assert.equal(check.titleFromBranch("TIP-18340-Fix-Header"), "Fix Header");
+  assert.equal(check.titleFromBranch("ABC-1234-Fix-Header"), "Fix Header");
   assert.equal(check.titleFromBranch("ABC-1-add_widget"), "add widget");
   assert.equal(check.titleFromBranch("my-feature-branch"), "my feature branch");
   assert.equal(check.titleFromBranch(""), "(no title)");
