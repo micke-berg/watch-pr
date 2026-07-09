@@ -39,6 +39,18 @@ function loadState() {
   catch (e) { if (e.code === "ENOENT") return { watching: [] }; throw e; }
   return JSON.parse(raw);
 }
+
+// The one place state is written, so every writer is atomic-shaped and consistent.
+function saveState(state) {
+  fs.writeFileSync(STATE, JSON.stringify(state, null, 2) + "\n");
+}
+
+// A PR's lifecycle phase from its decoded shape. Shared by registerPr (seed) and
+// diffLoop (each tick) so the two can never disagree on what "done"/"ci"/"review" means.
+function phaseFor(d) {
+  if (d.prStatus === "completed" || d.prStatus === "abandoned") return "done";
+  return (d.ci === "queued" || d.ci === "running") ? "ci" : "review";
+}
 const DONE_EXPIRE_MS = config.doneExpireHours * 60 * 60 * 1000; // merged/abandoned cards auto-drop after this
 const APPROVALS_PREFERRED = config.approvalsPreferred || 2; // the "ready to merge" nudge target
 
@@ -102,8 +114,7 @@ function diffLoop(pr, d, nowIso) {
     merged: d.prStatus === "completed" && !pr.mergeNotified,
   };
 
-  const phase = (d.prStatus === "completed" || d.prStatus === "abandoned") ? "done"
-    : (d.ci === "queued" || d.ci === "running") ? "ci" : "review";
+  const phase = phaseFor(d);
 
   const nextSeen = {};
   d.threads.forEach((t) => { if (t.updated) nextSeen[t.id] = t.updated; });
@@ -185,15 +196,50 @@ async function refreshAll(state, opts) {
   return { state, results, suggestedDelaySeconds };
 }
 
+// Auto-discovery for "watch all my open PRs" (config.watchMine). When the provider can
+// list your PRs, add any that aren't already watched — across every repo, no manual add.
+// Mutates state in place (the caller persists) and returns how many were added. Fully
+// best-effort: a listing or decode failure is swallowed and retried next tick, never
+// sinking a poll. A no-op unless watchMine is on and the provider supports listing.
+async function syncMine(state) {
+  if (!config.watchMine || typeof provider.listMyOpenPrs !== "function") return 0;
+  state.watching = state.watching || [];
+  let mine;
+  try { mine = await provider.listMyOpenPrs(); }
+  catch (e) { return 0; }
+  const nowIso = new Date().toISOString();
+  // Skip PRs older than the cutoff so long-abandoned experiments don't clutter the board
+  // (0 = no age limit). We filter on the listing's createdAt first (no decode cost); when
+  // the provider omits it, we fall back to the decoded createdAt below.
+  const maxAgeMs = (config.watchMineMaxAgeDays || 0) * 24 * 60 * 60 * 1000;
+  const cutoff = maxAgeMs > 0 ? Date.now() - maxAgeMs : 0;
+  const tooOld = (createdAt) => cutoff && createdAt && Date.parse(createdAt) < cutoff;
+  let added = 0;
+  for (const row of mine || []) {
+    const repository = row.repo || config.defaultRepository;
+    if (!row.id || !repository || isWatched(state, row.id, repository)) continue;
+    if (tooOld(row.createdAt)) continue; // stale per the listing — never even decode it
+    try {
+      const d = await provider.decodePr(Number(row.id), repository);
+      if (tooOld(d.createdAt)) continue; // fallback for providers whose listing has no date
+      state.watching.push(makeEntry(row.id, repository, d, nowIso));
+      added++;
+    } catch (e) { /* skip this PR; a later tick retries it */ }
+  }
+  if (added) state.nextPollAt = ""; // re-evaluate cadence now that the list changed
+  return added;
+}
+
 async function runCheck(opts) {
   const state = loadState();
+  if (config.watchMine) await syncMine(state);
   const out = await refreshAll(state, opts);
   if (opts && opts.loop) {
     out.state.nextPollAt = out.suggestedDelaySeconds
       ? new Date(Date.now() + out.suggestedDelaySeconds * 1000).toISOString()
       : "";
   }
-  fs.writeFileSync(STATE, JSON.stringify(out.state, null, 2) + "\n");
+  saveState(out.state);
   return out;
 }
 
@@ -207,13 +253,27 @@ async function pollIfDue(opts) {
   const force = !!(opts && opts.force);
   const state = loadState();
   const now = Date.now();
+  const due = force || !state.nextPollAt || now >= Date.parse(state.nextPollAt);
+
+  // Discover new PRs on the poll cadence, never on every heartbeat — so watch-all doesn't
+  // turn an idle machine into a per-minute PR search. Runs only when a poll is due.
+  if (due && config.watchMine) await syncMine(state);
+
   const active = (state.watching || []).filter((p) => p.phase !== "done");
 
   if (!active.length) {
-    if (pruneDone(state)) fs.writeFileSync(STATE, JSON.stringify(state, null, 2) + "\n");
-    return { polled: false, idle: true, active: 0, nextPollAt: "" };
+    let changed = pruneDone(state) > 0;
+    // With watch-all on, keep re-checking for new PRs even while the list is empty, by
+    // scheduling the next discovery on the review cadence (otherwise an empty list would
+    // never poll again and the first PR would never be found).
+    if (due && config.watchMine) {
+      state.nextPollAt = new Date(now + config.cadence.reviewSeconds * 1000).toISOString();
+      changed = true;
+    }
+    if (changed) saveState(state);
+    return { polled: false, idle: true, active: 0, nextPollAt: state.nextPollAt || "" };
   }
-  if (!force && state.nextPollAt && now < Date.parse(state.nextPollAt)) {
+  if (!due) {
     return { polled: false, notDue: true, active: active.length, nextPollAt: state.nextPollAt };
   }
 
@@ -221,7 +281,7 @@ async function pollIfDue(opts) {
   out.state.nextPollAt = out.suggestedDelaySeconds
     ? new Date(now + out.suggestedDelaySeconds * 1000).toISOString()
     : "";
-  fs.writeFileSync(STATE, JSON.stringify(out.state, null, 2) + "\n");
+  saveState(out.state);
   return {
     polled: true,
     active: active.length,
@@ -231,27 +291,12 @@ async function pollIfDue(opts) {
   };
 }
 
-// Add a PR to the watch list by id (the dashboard's "add PR" input; also usable for any
-// manual entry point). Enriches from Azure so the card renders fully right away, and
-// seeds every last-seen field from the current state so adding a PR does NOT fire
-// notifications for its existing CI/approval/comment situation — only for future changes.
-// Read-only against Azure; the only write is the local state file.
-async function registerPr(id, repo) {
-  id = String(id == null ? "" : id).trim();
-  if (!/^\d+$/.test(id)) throw new Error("PR id must be a number");
-  const repository = (repo && String(repo).trim()) || config.defaultRepository;
-
-  const state = loadState();
-  state.watching = state.watching || [];
-  if (state.watching.some((p) => String(p.id) === id)) {
-    return { added: false, reason: "already watching", id: Number(id) };
-  }
-
-  const d = await provider.decodePr(Number(id), repository); // throws if the PR can't be read
-  const nowIso = new Date().toISOString();
-  const phase = (d.prStatus === "completed" || d.prStatus === "abandoned") ? "done"
-    : (d.ci === "queued" || d.ci === "running") ? "ci" : "review";
-
+// Build a fully-seeded watch-list entry from a decoded PR. Every last-seen field is set
+// to the current situation so the PR does NOT fire notifications for its existing
+// CI/approval/comment state — only for future changes. Pure: no I/O, so both registerPr
+// (manual add) and syncMine (auto-discovery) can share it.
+function makeEntry(id, repository, d, nowIso) {
+  const phase = phaseFor(d);
   const seenThreads = {};
   (d.threads || []).forEach((t) => { if (t.updated) seenThreads[t.id] = t.updated; });
 
@@ -269,22 +314,47 @@ async function registerPr(id, repo) {
     lastMergeStatus: d.mergeStatus,
     lastChangesRequested: d.changesRequested,
     seenThreads,
-    readyNotified: d.approvals >= 2,          // already at preferred → don't announce
+    readyNotified: d.approvals >= APPROVALS_PREFERRED, // already at preferred → don't announce
     mergeNotified: d.prStatus === "completed",
     doneAt: phase === "done" ? nowIso : "",
     lastTickAt: nowIso,
   };
   entry.display = buildDisplay(entry, d, nowIso);
+  return entry;
+}
+
+// True if this id+repo is already on the watch list. id alone is not unique across repos
+// (every repo numbers PRs from 1), so watch-all matches on both.
+function isWatched(state, id, repository) {
+  return (state.watching || []).some((p) => String(p.id) === String(id) && p.repository === repository);
+}
+
+// Add a PR to the watch list by id (the dashboard's "add PR" input; also usable for any
+// manual entry point). Enriches from the host so the card renders fully right away.
+// Read-only against the host; the only write is the local state file.
+async function registerPr(id, repo) {
+  id = String(id == null ? "" : id).trim();
+  if (!/^\d+$/.test(id)) throw new Error("PR id must be a number");
+  const repository = (repo && String(repo).trim()) || config.defaultRepository;
+
+  const state = loadState();
+  state.watching = state.watching || [];
+  if (isWatched(state, id, repository)) {
+    return { added: false, reason: "already watching", id: Number(id) };
+  }
+
+  const d = await provider.decodePr(Number(id), repository); // throws if the PR can't be read
+  const entry = makeEntry(id, repository, d, new Date().toISOString());
   state.watching.push(entry);
   state.nextPollAt = ""; // let the resident poller re-evaluate cadence on its next tick
-  fs.writeFileSync(STATE, JSON.stringify(state, null, 2) + "\n");
+  saveState(state);
   return { added: true, id: Number(id), entry };
 }
 
 // decodePr is re-exported from the active provider so existing importers (and the
 // parity harness) keep the same surface after the seam extraction. diffLoop and
 // titleFromBranch are exported for unit tests (pure functions).
-module.exports = { runCheck, refreshAll, decodePr: provider.decodePr, pruneDone, pollIfDue, registerPr, diffLoop, titleFromBranch };
+module.exports = { runCheck, refreshAll, decodePr: provider.decodePr, pruneDone, pollIfDue, registerPr, syncMine, diffLoop, titleFromBranch, phaseFor, isWatched };
 
 // CLI
 if (require.main === module) {
