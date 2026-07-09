@@ -10,7 +10,8 @@
 //   me                 identity string; your own comments never count as a blocker
 //   prUrl(repo, id)    web URL for a PR
 //   decodePr(id, repo) the neutral decoded shape (prStatus, ci, approvals, threads, …)
-// listMyOpenPrs() is optional and not implemented for Azure.
+//   listMyOpenPrs()          optional: [{id,repo,createdAt}] of your open PRs (config.watchMine)
+//   listReviewRequestedPrs() optional: [{id,repo,createdAt}] awaiting your review (config.watchReviewRequests)
 
 const { exec } = require("child_process");
 const config = require("../config.js");
@@ -43,6 +44,13 @@ function assertSafeId(id) {
 }
 function assertSafeRepo(repo) {
   if (!/^[A-Za-z0-9._/ -]+$/.test(String(repo))) throw new Error("invalid repository name");
+}
+// The identity is interpolated into the `az repos pr list` command below (unlike decodePr,
+// where `me` is only used for in-JS comparison). It comes from trusted local config, but
+// guard it anyway so a stray quote or shell metachar can't break out of the quoted argument.
+// Blacklist (not whitelist) so international names / apostrophes / emails still pass.
+function assertSafeIdentity(who) {
+  if (/["`$\\;&|<>%^!\r\n]/.test(String(who))) throw new Error("config.me contains characters unsafe for a shell argument");
 }
 
 // Fresh read of one PR from Azure. Returns decoded primitives + the human comment threads.
@@ -107,4 +115,32 @@ async function decodePr(id, repo) {
   };
 }
 
-module.exports = { me: ME, prUrl, decodePr, assertSafeId, assertSafeRepo };
+// Optional: every open PR I authored, as [{ id, repo, createdAt }] — powers "watch all my
+// PRs" (config.watchMine) with zero manual registration. createdAt lets the core skip stale
+// PRs before paying for a per-PR decode.
+async function listMyOpenPrs() {
+  return rowsToPrs(await listByIdentity("creator"));
+}
+
+// Optional: every open PR waiting on MY review, as [{ id, repo, createdAt }] — powers "watch
+// PRs awaiting my review" (config.watchReviewRequests). Azure drops a PR from the --reviewer
+// set the moment you vote, which is what lets the core clear the reviewer card once you act.
+async function listReviewRequestedPrs() {
+  return rowsToPrs(await listByIdentity("reviewer"));
+}
+
+// Shared: list active PRs filtered by my identity in the given role. `me` is the same display
+// name Azure shows; az resolves it to the account (`@me` is NOT supported by `az repos pr
+// list`). Relies on the CLI's configured org/project defaults, exactly like decodePr's calls.
+function listByIdentity(role) {
+  if (!ME) throw new Error(`config.me must be set to your Azure display name to use ${role} auto-discovery`);
+  assertSafeIdentity(ME);
+  return az(`repos pr list --${role} "${ME}" --status active --query "[].{id:pullRequestId, repo:repository.name, createdAt:creationDate}" -o json`);
+}
+
+// Shared shaping for the two list calls → the neutral [{ id, repo, createdAt }] contract.
+function rowsToPrs(rows) {
+  return (rows || []).map((r) => ({ id: r.id, repo: r.repo || "", createdAt: r.createdAt || "" })).filter((r) => r.repo);
+}
+
+module.exports = { me: ME, prUrl, decodePr, listMyOpenPrs, listReviewRequestedPrs, assertSafeId, assertSafeRepo };

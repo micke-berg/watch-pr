@@ -29,13 +29,13 @@ Node plus your host's own CLI (`az` / `gh`).
 - A resident poller that keeps it fresh and fires notifications with no editor/agent running.
 - Merged/abandoned PRs auto-tidy into a "Done" strip and expire after 24h.
 - **＋ Watch PR** — add any PR by id; monitored just like the rest.
-- **Watch all my PRs** (optional) — flip on `watchMine` and every open PR you authored, across
-  every repo, is discovered and watched automatically. A staleness cutoff keeps old
-  experiments off the board. *(GitHub only for now.)*
+- **Watch all my PRs** (optional) — flip on `watchMine` and every open PR you authored is
+  discovered and watched automatically. A staleness cutoff keeps old experiments off the board.
+  *(GitHub spans every repo you can see; Azure covers your configured project.)*
 - **Watch PRs awaiting my review** (optional) — flip on `watchReviewRequests` and every open PR
   where your review was requested shows up as a **review requested** card, and clears itself the
   moment you review it. So the other half of "what needs me" is on the board too, not just your
-  own PRs. *(GitHub only for now.)*
+  own PRs. *(Works on both providers.)*
 
 ## How it works (the short version)
 
@@ -109,9 +109,9 @@ phone push, and the full list of settings are in [Setup](#setup) and below.
    | --- | --- |
    | `approvalsRequired` | approvals that make a PR mergeable (the green bar). Set to your team's policy |
    | `approvalsPreferred` | soft target that fires the one-off "ready to merge" nudge — independent of the above |
-   | `watchMine` | `true` to auto-watch every open PR you authored across all repos (GitHub only). Default `false` |
+   | `watchMine` | `true` to auto-watch every open PR you authored (GitHub: all repos; Azure: your project). Default `false` |
    | `watchMineMaxAgeDays` | with `watchMine` on, skip PRs older than this many days (`0` = no limit). Default `30` |
-   | `watchReviewRequests` | `true` to auto-watch every open PR awaiting your review; each card clears once you review it (GitHub only). Default `false` |
+   | `watchReviewRequests` | `true` to auto-watch every open PR awaiting your review; each card clears once you review it. Default `false` |
    | `ntfyTopic` / `ntfyServer` | optional phone push (see Notifications) |
    | `port` | dashboard port (default 7878) |
    | `claudeExe` / `mainRepoDir` | optional — enables the one-click merge-conflict explainer |
