@@ -15,6 +15,7 @@
   "_comment_watchmine": "Set watchMine to true to auto-watch every open PR you authored across all repos (no manual adding). watchMineMaxAgeDays skips PRs older than N days so stale experiments don't clutter the board (0 = no limit). Manual adds are never filtered.",
   "watchMine": false,
   "watchMineMaxAgeDays": 30,
+  "_comment_approvals": "Set both to your own team's policy — the 1/2 here is just an example. approvalsRequired = how many approvals make a PR count as mergeable (the green bar). approvalsPreferred = a soft target that fires the one-off 'ready to merge' nudge. They are independent knobs.",
   "approvalsRequired": 1,
   "approvalsPreferred": 2,
   "port": 7878,

@@ -74,7 +74,8 @@ Node plus your host's own CLI (`az` / `gh`).
 
    | key | what |
    | --- | --- |
-   | `approvalsRequired` / `approvalsPreferred` | your team's approval bar |
+   | `approvalsRequired` | approvals that make a PR mergeable (the green bar). Set to your team's policy |
+   | `approvalsPreferred` | soft target that fires the one-off "ready to merge" nudge — independent of the above |
    | `watchMine` | `true` to auto-watch every open PR you authored across all repos (GitHub only). Default `false` |
    | `watchMineMaxAgeDays` | with `watchMine` on, skip PRs older than this many days (`0` = no limit). Default `30` |
    | `ntfyTopic` / `ntfyServer` | optional phone push (see Notifications) |
