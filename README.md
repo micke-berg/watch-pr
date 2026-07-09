@@ -18,6 +18,9 @@ Node plus your host's own CLI (`az` / `gh`).
 
 - A live dashboard at `http://localhost:7878` — one card per PR (CI, approvals, unresolved
   comments, mergeable), sorted most-urgent-first, with a "needs you" counter.
+- **Ambient awareness** — the browser tab shows `🔴 watch-pr (N)` and the favicon carries a red
+  dot whenever something needs you, so a pinned tab tells you at a glance without switching to it.
+  Both clear back to plain 👀 when nothing does.
 - A resident poller that keeps it fresh and fires notifications with no editor/agent running.
 - Merged/abandoned PRs auto-tidy into a "Done" strip and expire after 24h.
 - **＋ Watch PR** — add any PR by id; monitored just like the rest.
@@ -117,10 +120,20 @@ Keep it running from every login. An empty watch list makes zero network calls, 
 - **Windows:** put a shortcut to `pr-watch-service.vbs` in your Startup folder
   (`Win+R` → `shell:startup`). Runs hidden.
 - **macOS:** copy `macos/com.watchpr.plist.example` to
-  `~/Library/LaunchAgents/com.watchpr.plist`, fill in your `node` path (`which node`) and
-  the repo path, then `launchctl load ~/Library/LaunchAgents/com.watchpr.plist`.
+  `~/Library/LaunchAgents/com.watchpr.plist`, fill in your `node` path and the repo path, then
+  `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.watchpr.plist` (to stop:
+  `launchctl bootout gui/$(id -u) …`). Two things launchd gets wrong by default, because it
+  does **not** load your shell's environment:
+  - **It won't find `gh`/`az` on your `PATH`.** Set `ghCliPath` (or `azCliPath`) to the absolute
+    path in `config.json` — e.g. `which gh` → `/usr/local/bin/gh` — or the dashboard will just
+    sit empty. The plist template also sets a `PATH` covering the common locations.
+  - **Point `node` at its real binary**, not a version-manager shim: `node -e "console.log(process.execPath)"`.
+    Running `node` directly (rather than via a shell) is also why the agent shows up as
+    `com.watchpr` in `launchctl list` instead of an anonymous `sh`. Note that an `nvm` path is
+    version-pinned — if you upgrade Node, update the plist.
 - **Linux:** a systemd `--user` service running `node server.js`, or just run `npm start`
-  under your usual session manager.
+  under your usual session manager. (Same `PATH` caveat as macOS — set `ghCliPath`/`azCliPath`
+  absolute, or give the unit a `PATH` that includes them.)
 
 ## Notifications
 
