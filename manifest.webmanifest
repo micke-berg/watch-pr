@@ -1,0 +1,14 @@
+{
+  "id": "watch-pr",
+  "name": "PR Watch",
+  "short_name": "PR Watch",
+  "description": "Local, read-only pull-request dashboard.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#131118",
+  "theme_color": "#131118",
+  "icons": [
+    { "src": "/apple-touch-icon.png", "sizes": "360x360", "type": "image/png", "purpose": "any" }
+  ]
+}
