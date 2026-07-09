@@ -46,7 +46,8 @@ function sendJson(res, code, obj) {
 }
 
 function readState() {
-  return JSON.parse(fs.readFileSync(STATE, "utf8"));
+  try { return JSON.parse(fs.readFileSync(STATE, "utf8")); }
+  catch (e) { if (e.code === "ENOENT") return { watching: [] }; throw e; }
 }
 function writeState(state) {
   fs.writeFileSync(STATE, JSON.stringify(state, null, 2) + "\n");

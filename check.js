@@ -29,6 +29,16 @@ const provider = require(PROVIDERS[config.provider] || PROVIDERS.azure);
 const ROOT = __dirname;
 const STATE = path.join(ROOT, "state.json");
 const ME = provider.me; // your own comments are not "a reviewer waiting on you"
+
+// Read the local state file, tolerating first run: a fresh clone has no state.json
+// (it's gitignored), so a missing file is the empty watch list, not an error. Corrupt
+// JSON still throws — that's a real problem worth surfacing.
+function loadState() {
+  let raw;
+  try { raw = fs.readFileSync(STATE, "utf8"); }
+  catch (e) { if (e.code === "ENOENT") return { watching: [] }; throw e; }
+  return JSON.parse(raw);
+}
 const DONE_EXPIRE_MS = config.doneExpireHours * 60 * 60 * 1000; // merged/abandoned cards auto-drop after this
 const APPROVALS_PREFERRED = config.approvalsPreferred || 2; // the "ready to merge" nudge target
 
@@ -176,7 +186,7 @@ async function refreshAll(state, opts) {
 }
 
 async function runCheck(opts) {
-  const state = JSON.parse(fs.readFileSync(STATE, "utf8"));
+  const state = loadState();
   const out = await refreshAll(state, opts);
   if (opts && opts.loop) {
     out.state.nextPollAt = out.suggestedDelaySeconds
@@ -195,7 +205,7 @@ async function runCheck(opts) {
 // double-notifying.
 async function pollIfDue(opts) {
   const force = !!(opts && opts.force);
-  const state = JSON.parse(fs.readFileSync(STATE, "utf8"));
+  const state = loadState();
   const now = Date.now();
   const active = (state.watching || []).filter((p) => p.phase !== "done");
 
@@ -231,7 +241,7 @@ async function registerPr(id, repo) {
   if (!/^\d+$/.test(id)) throw new Error("PR id must be a number");
   const repository = (repo && String(repo).trim()) || config.defaultRepository;
 
-  const state = JSON.parse(fs.readFileSync(STATE, "utf8"));
+  const state = loadState();
   state.watching = state.watching || [];
   if (state.watching.some((p) => String(p.id) === id)) {
     return { added: false, reason: "already watching", id: Number(id) };
