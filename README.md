@@ -37,6 +37,27 @@ Node plus your host's own CLI (`az` / `gh`).
 - The **only** OS-specific setup is the optional "always-on at login" step (below), because
   adding something to your login items should be a deliberate choice — not automatic.
 
+## Quickstart
+
+GitHub, on macOS or Linux (Windows: same, but launch with `dashboard.cmd`). Needs
+[Node.js 18+](https://nodejs.org) and the [GitHub CLI](https://cli.github.com):
+
+```sh
+gh auth login                                     # once, if you haven't already
+git clone https://github.com/micke-berg/watch-pr
+cd watch-pr
+cp config.example.json config.json                # then set "defaultRepository": "owner/repo"
+npm start                                          # dashboard → http://localhost:7878
+```
+
+Add PRs with the dashboard's **＋ Watch PR** button, or set `"watchMine": true` in
+`config.json` to auto-watch every open PR you authored. Azure DevOps, always-on-at-login,
+phone push, and the full list of settings are in [Setup](#setup) and below.
+
+> Using an AI coding agent? This README is written to be read top-to-bottom by one — point
+> it at the repo and the steps above are all it needs (you'll still run `gh auth login`
+> yourself, since that's an interactive browser flow).
+
 ## Requirements
 
 - **Node.js 18+**
