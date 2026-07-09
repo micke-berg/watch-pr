@@ -14,6 +14,8 @@ Works with **Azure DevOps** or **GitHub**, on **Windows, macOS, or Linux** — t
 behind a small provider adapter and an OS-aware notifier. Zero runtime dependencies: pure
 Node plus your host's own CLI (`az` / `gh`).
 
+![The watch-pr dashboard: a "needs you" counter over one card per PR, each showing CI, approvals, comments, and mergeability, sorted most-urgent-first (sample data shown).](docs/dashboard.png)
+
 ## What you get
 
 - A live dashboard at `http://localhost:7878` — one card per PR (CI, approvals, unresolved
