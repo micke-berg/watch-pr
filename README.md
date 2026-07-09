@@ -120,7 +120,16 @@ phone push, and the full list of settings are in [Setup](#setup) and below.
    ```
    then open `http://localhost:7878` — or use `dashboard.cmd` (Windows) / `dashboard.sh` (macOS/Linux).
 
-   **Tip:** in Safari, **File → Add to Dock** gives you a one-click launcher with its own icon.
+   **Pin it as an app** (optional):
+   - **Windows / Linux (Edge or Chrome):** click the **Install** icon in the address bar. You get
+     a real app window (no browser chrome), pinnable to the taskbar, and a **red count badge** on
+     the icon when PRs need you — it clears when nothing does.
+   - **macOS (Safari):** **File → Add to Dock** gives a one-click launcher with its own icon.
+     (Safari's Dock icon is static — no live badge there; the browser-tab favicon is the live
+     indicator on macOS.)
+
+   Either way, the always-on **server keeps running in the background** — the app is just a
+   nicer front door to it, so notifications still fire whether or not the window is open.
 
 ## Always-on (optional, one-time per OS)
 
