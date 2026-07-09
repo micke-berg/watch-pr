@@ -4,11 +4,18 @@
   macOS always-on LaunchAgent for watch-pr (the mac analog of pr-watch-service.vbs).
 
   Setup:
-    1. Find your node path:   which node      (e.g. /opt/homebrew/bin/node, or an nvm path)
-    2. Copy this file to:     ~/Library/LaunchAgents/com.watchpr.plist
+    1. Find your real node binary:  node -e "console.log(process.execPath)"
+       (use this, not a version-manager shim — it's also why the agent shows up as
+        "com.watchpr" in `launchctl list` instead of an anonymous "sh")
+    2. Copy this file to:           ~/Library/LaunchAgents/com.watchpr.plist
     3. Replace NODE_PATH and the two /ABSOLUTE/PATH/TO/watch-pr placeholders with real paths.
-    4. Load it:               launchctl load ~/Library/LaunchAgents/com.watchpr.plist
-       (to stop:              launchctl unload ~/Library/LaunchAgents/com.watchpr.plist)
+    4. Load it:                     launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.watchpr.plist
+       (to stop:                    launchctl bootout   gui/$(id -u) ~/Library/LaunchAgents/com.watchpr.plist)
+
+  IMPORTANT: launchd does NOT load your shell's environment, so the `gh` / `az` CLI won't be
+  on PATH. Set `ghCliPath` (or `azCliPath`) to the absolute path in config.json (e.g.
+  `which gh` -> /usr/local/bin/gh) or the dashboard will sit empty. The PATH below is a
+  backstop covering the usual locations; adjust if your CLIs live elsewhere.
 
   It runs at login and is kept alive; an empty watch list makes zero network calls.
 -->
@@ -23,6 +30,11 @@
   </array>
   <key>WorkingDirectory</key>
   <string>/ABSOLUTE/PATH/TO/watch-pr</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
