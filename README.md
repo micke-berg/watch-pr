@@ -139,7 +139,8 @@ phone push, and the full list of settings are in [Setup](#setup) and below.
 Keep it running from every login. An empty watch list makes zero network calls, so it's idle-cheap.
 
 - **Windows:** put a shortcut to `pr-watch-service.vbs` in your Startup folder
-  (`Win+R` → `shell:startup`). Runs hidden.
+  (`Win+R` → `shell:startup`). Runs hidden. It launches `node` from your `PATH`; if your
+  login `PATH` doesn't include node, set the absolute path at the top of the `.vbs`.
 - **macOS:** copy `macos/com.watchpr.plist.example` to
   `~/Library/LaunchAgents/com.watchpr.plist`, fill in your `node` path and the repo path, then
   `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.watchpr.plist` (to stop:
@@ -152,9 +153,9 @@ Keep it running from every login. An empty watch list makes zero network calls, 
     Running `node` directly (rather than via a shell) is also why the agent shows up as
     `com.watchpr` in `launchctl list` instead of an anonymous `sh`. Note that an `nvm` path is
     version-pinned — if you upgrade Node, update the plist.
-- **Linux:** a systemd `--user` service running `node server.js`, or just run `npm start`
-  under your usual session manager. (Same `PATH` caveat as macOS — set `ghCliPath`/`azCliPath`
-  absolute, or give the unit a `PATH` that includes them.)
+- **Linux:** copy `linux/watch-pr.service.example` to `~/.config/systemd/user/watch-pr.service`,
+  fill in your `node` + repo paths, then `systemctl --user enable --now watch-pr.service`. (Same
+  `PATH` caveat as macOS — set `ghCliPath`/`azCliPath` absolute, or give the unit a `PATH`.)
 
 ## Notifications
 
@@ -204,7 +205,7 @@ show up the instant it's created.)
 | `server.js` | static server + resident poller + endpoints |
 | `config.js` / `config.json` | settings (copy from `config.example.json`) |
 | `state.json` | the watch list + per-PR snapshot the dashboard renders |
-| `pr-watch-service.vbs` / `dashboard.cmd` / `dashboard.sh` / `macos/…plist` | launchers |
+| `pr-watch-service.vbs` / `dashboard.cmd` / `dashboard.sh` / `macos/…plist` / `linux/…service` | launchers |
 
 The dashboard is deliberately a single self-contained `index.html` — inline CSS/JS, no
 build step and no front-end dependencies — so it stays zero-install and auditable in one
