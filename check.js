@@ -388,9 +388,14 @@ function makeEntry(id, repository, d, nowIso, role) {
 }
 
 // True if this id+repo is already on the watch list. id alone is not unique across repos
-// (every repo numbers PRs from 1), so watch-all matches on both.
+// (every repo numbers PRs from 1), so watch-all matches on both — EXCEPT when one side has
+// no repository. A legacy or hand-edited entry can lack `repository`; without this, discovery
+// can't tell it's the same PR and adds a duplicate card. Treat a missing repository (on either
+// side) as a wildcard: match on id alone. Full id+repo entries still disambiguate normally.
 function isWatched(state, id, repository) {
-  return (state.watching || []).some((p) => String(p.id) === String(id) && p.repository === repository);
+  return (state.watching || []).some((p) =>
+    String(p.id) === String(id) && (p.repository === repository || !p.repository || !repository)
+  );
 }
 
 // Add a PR to the watch list by id (the dashboard's "add PR" input; also usable for any
