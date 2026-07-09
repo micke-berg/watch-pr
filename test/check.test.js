@@ -73,6 +73,18 @@ test("isWatched: matches on id AND repo (ids are not unique across repos)", () =
   assert.equal(check.isWatched({}, 5, "owner/a"), false);       // no watching list
 });
 
+test("dropStaleReviewers: clears reviewed/withdrawn review cards, keeps live + non-reviewer", () => {
+  const watching = [
+    { id: 1, repository: "o/a", role: "reviewer" },  // still requested -> keep
+    { id: 2, repository: "o/a", role: "reviewer" },  // no longer requested -> drop
+    { id: 3, repository: "o/b" },                     // authored/manual -> never touched
+    { id: 1, repository: "o/b", role: "reviewer" },  // same id, other repo, not live -> drop
+  ];
+  const live = new Set(["1@o/a"]);
+  const kept = check.dropStaleReviewers(watching, live).map((p) => `${p.id}@${p.repository}`);
+  assert.deepEqual(kept.sort(), ["1@o/a", "3@o/b"]);
+});
+
 test("pruneDone: drops long-finished cards, keeps active + recent", () => {
   const h = (n) => new Date(Date.now() - n * 60 * 60 * 1000).toISOString();
   const state = { watching: [

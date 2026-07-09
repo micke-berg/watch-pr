@@ -92,15 +92,16 @@ const cola = (t, a) => { const x = tones[t]; return `oklch(${x.L} ${x.C} ${x.H} 
 
 // design status model — rank drives sort + "needs you"; tone drives colour.
 const statusMeta = {
-  ci_failed:         { rank: 1, label: "CI FAILED",         tone: "crit"    },
-  conflicts:         { rank: 2, label: "MERGE CONFLICTS",   tone: "crit"    },
-  changes_requested: { rank: 3, label: "CHANGES REQUESTED", tone: "warn"    },
-  ready:             { rank: 4, label: "READY TO MERGE",    tone: "go"      },
-  comments:          { rank: 5, label: "OPEN COMMENTS",     tone: "warn"    },
-  waiting_ci:        { rank: 6, label: "WAITING ON CI",     tone: "active"  },
-  needs_approval:    { rank: 7, label: "NEEDS APPROVAL",    tone: "neutral" },
-  in_review:         { rank: 8, label: "IN REVIEW",         tone: "neutral" },
-  draft:             { rank: 9, label: "DRAFT",             tone: "dim"     },
+  ci_failed:         { rank: 1,  label: "CI FAILED",         tone: "crit"    },
+  conflicts:         { rank: 2,  label: "MERGE CONFLICTS",   tone: "crit"    },
+  review_requested:  { rank: 3,  label: "REVIEW REQUESTED",  tone: "warn"    }, // a PR waiting on YOUR review
+  changes_requested: { rank: 4,  label: "CHANGES REQUESTED", tone: "warn"    },
+  ready:             { rank: 5,  label: "READY TO MERGE",    tone: "go"      },
+  comments:          { rank: 6,  label: "OPEN COMMENTS",     tone: "warn"    },
+  waiting_ci:        { rank: 7,  label: "WAITING ON CI",     tone: "active"  },
+  needs_approval:    { rank: 8,  label: "NEEDS APPROVAL",    tone: "neutral" },
+  in_review:         { rank: 9,  label: "IN REVIEW",         tone: "neutral" },
+  draft:             { rank: 10, label: "DRAFT",             tone: "dim"     },
 };
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -162,10 +163,14 @@ function activeVM(e) {
     openComments: d.openComments || 0,
     mergeable: d.mergeable === false ? "conflicts" : "clean",
     isDraft: !!d.isDraft,
-    status: statusOf(d),
+    // A reviewer-role card is on the board because your review was requested, so that is its
+    // status until you review it (at which point discovery drops it), regardless of the PR's
+    // own CI/approval state — those are the author's to act on, not yours.
+    status: e.role === "reviewer" ? "review_requested" : statusOf(d),
     url: d.url || "#",
     prStatus: d.prStatus || "active",
     repo: e.repository || "",
+    role: e.role || "author",
   };
 }
 function doneVM(e) {
@@ -189,6 +194,7 @@ const isDoneEntry = (e) => {
 const SAMPLE_PRS = [
   { id:4821, title:"Fix token refresh race in the auth interceptor", base:"main", opened:"3h ago", ci:"failed", approvals:1, approvalsRequired:2, approvalNames:["A. Ruiz"], openComments:2, mergeable:"clean", isDraft:false, status:"ci_failed", url:"#", prStatus:"active" },
   { id:4790, title:"Migrate billing service to gRPC transport", base:"release/24.3", opened:"1d ago", ci:"passed", approvals:2, approvalsRequired:2, approvalNames:["A. Ruiz","K. Osei"], openComments:1, mergeable:"conflicts", isDraft:false, status:"conflicts", url:"#", prStatus:"active" },
+  { id:4856, title:"Tighten rate limits on the public API gateway", base:"main", opened:"1h ago", ci:"passed", approvals:0, approvalsRequired:2, approvalNames:[], openComments:0, mergeable:"clean", isDraft:false, status:"review_requested", url:"#", prStatus:"active", role:"reviewer" },
   { id:4835, title:"Redesign empty states across the dashboard", base:"main", opened:"5h ago", ci:"passed", approvals:1, approvalsRequired:2, approvalNames:["M. Devi"], openComments:4, mergeable:"clean", isDraft:false, status:"changes_requested", url:"#", prStatus:"active" },
   { id:4802, title:"Add a retry budget to the search gateway", base:"main", opened:"2d ago", ci:"passed", approvals:2, approvalsRequired:2, approvalNames:["A. Ruiz","J. Park"], openComments:0, mergeable:"clean", isDraft:false, status:"ready", url:"#", prStatus:"active" },
   { id:4840, title:"Cache warmup for feature-flag evaluation", base:"main", opened:"6h ago", ci:"passed", approvals:1, approvalsRequired:2, approvalNames:["K. Osei"], openComments:3, mergeable:"clean", isDraft:false, status:"comments", url:"#", prStatus:"active" },
@@ -321,7 +327,7 @@ function analyzePanelHtml(id, repo) {
 
 // ── hero band ────────────────────────────────────────────────────────────────
 function heroHtml(prs) {
-  const needYou = prs.filter((pr) => statusMeta[pr.status].rank <= 5).length;
+  const needYou = prs.filter((pr) => statusMeta[pr.status].rank <= 6).length;
   const anyCrit = prs.some((pr) => statusMeta[pr.status].tone === "crit");
   const heroTone = needYou > 0 ? (anyCrit ? "crit" : "warn") : "go";
   const cnt = (st) => prs.filter((pr) => pr.status === st).length;
@@ -329,6 +335,7 @@ function heroHtml(prs) {
   const segs = [];
   if (cnt("ci_failed")) segs.push(cnt("ci_failed") + " CI FAILING");
   if (cnt("conflicts")) segs.push(cnt("conflicts") + " CONFLICT" + (cnt("conflicts") > 1 ? "S" : ""));
+  if (cnt("review_requested")) segs.push(cnt("review_requested") + " TO REVIEW");
   if (cnt("changes_requested")) segs.push(cnt("changes_requested") + " CHANGES REQ");
   if (cnt("ready")) segs.push(cnt("ready") + " READY");
   if (cnt("comments")) segs.push(cnt("comments") + " W/ COMMENTS");

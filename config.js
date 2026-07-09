@@ -23,6 +23,9 @@ const DEFAULTS = {
                                                        //   only PRs you add by hand are watched.
   watchMineMaxAgeDays: 30,                              // when watchMine is on, skip PRs older than this many
                                                        //   days (0 = no limit). Manual adds are never filtered.
+  watchReviewRequests: false,                          // auto-watch every open PR awaiting your review (uses the
+                                                       //   provider's listReviewRequestedPrs). A card clears once
+                                                       //   you've reviewed it. GitHub only for now.
   defaultRepository: "",                               // used when a watched PR carries no repository
                                                        //   azure: "repo"; github: "owner/repo"
   me: "",                                              // your identity (Azure display name / GitHub login); your own

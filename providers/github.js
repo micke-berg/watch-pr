@@ -157,6 +157,19 @@ async function decodePr(id, repo) {
 // before paying for a per-PR decode.
 async function listMyOpenPrs() {
   const rows = await gh(["search", "prs", "--author", "@me", "--state", "open", "--json", "number,repository,createdAt"]);
+  return rowsToPrs(rows);
+}
+
+// Optional: every open PR that is waiting on MY review, as [{ id, repo, createdAt }] — powers
+// "watch PRs awaiting my review". GitHub drops a PR from this set the moment I submit a review,
+// which is what lets the core clear the card once I've acted.
+async function listReviewRequestedPrs() {
+  const rows = await gh(["search", "prs", "--review-requested", "@me", "--state", "open", "--json", "number,repository,createdAt"]);
+  return rowsToPrs(rows);
+}
+
+// Shared shaping for the search endpoints above.
+function rowsToPrs(rows) {
   return (rows || []).map((r) => ({
     id: r.number,
     repo: (r.repository && (r.repository.nameWithOwner || r.repository.name)) || "",
@@ -164,4 +177,4 @@ async function listMyOpenPrs() {
   })).filter((r) => r.repo);
 }
 
-module.exports = { me: ME, prUrl, decodePr, listMyOpenPrs, deriveCi, mapPrStatus };
+module.exports = { me: ME, prUrl, decodePr, listMyOpenPrs, listReviewRequestedPrs, deriveCi, mapPrStatus };
