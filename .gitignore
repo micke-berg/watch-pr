@@ -7,3 +7,9 @@ notify.config.json
 # logs / deps
 server.log
 node_modules/
+# local design references (Claude Design handoff bundles — not shipped)
+design/
+# macOS cruft
+.DS_Store
+# local Claude Code config (launch.json etc.)
+.claude/

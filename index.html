@@ -15,59 +15,126 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="theme-color" content="#131118" />
+<!-- Resolve the theme before first paint (no flash): stored choice, else the OS. Dark is the
+     no-JS fallback. applyTheme() re-affirms this and keeps the meta/favicon/toggle in sync. -->
+<script>
+(function () {
+  try {
+    var p = localStorage.getItem("prwatch-theme");
+    var t = (p === "light" || p === "dark") ? p
+      : (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    document.documentElement.setAttribute("data-theme", t);
+  } catch (e) {}
+})();
+</script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { background: oklch(0.145 0.01 265); }
-  body { color: oklch(0.95 0.006 250); font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+
+  /* ── Theme palette ──────────────────────────────────────────────────────────
+     :root is the original dark theme, preserved value-for-value (pixel-identical).
+     [data-theme="light"] is the light theme, from the approved Claude Design handoff.
+     The theme is written to <html data-theme> in JS (stored choice, else the OS); dark is
+     the no-JS fallback. Flat colours are full oklch() values used as var(--x). The status
+     tones (crit/warn/go/active/neutral/dim) plus purple/draft are raw "L C H" triplets so
+     col()/cola() can add per-call alpha as oklch(var(--crit) / a). */
+  :root {
+    /* surfaces */
+    --bg: oklch(0.145 0.01 265); --panel: oklch(0.198 0.011 265); --panel-2: oklch(0.172 0.009 265);
+    --btn-bg: oklch(0.24 0.012 265);
+    /* borders */
+    --border: oklch(0.30 0.012 265); --border-soft: oklch(0.26 0.01 265); --border-faint: oklch(0.24 0.01 265);
+    --divider: oklch(0.29 0.01 265); --input-border: oklch(0.32 0.012 265); --btn-border: oklch(0.34 0.012 265);
+    /* text scale (bright → faint) */
+    --title: oklch(0.96 0.006 250); --text: oklch(0.95 0.006 250); --t-strong: oklch(0.90 0.008 258);
+    --code-text: oklch(0.85 0.008 258); --t-mid: oklch(0.78 0.012 258); --text-2: oklch(0.72 0.012 258);
+    --t-mute-hi: oklch(0.66 0.012 258); --t-mute: oklch(0.64 0.012 258); --text-3: oklch(0.60 0.01 258);
+    --dim-icon: oklch(0.58 0.01 258); --t-dim: oklch(0.56 0.01 258); --label-2: oklch(0.54 0.01 258);
+    --label: oklch(0.52 0.01 258); --faint-hi: oklch(0.50 0.01 258); --faint: oklch(0.48 0.01 258);
+    --fainter: oklch(0.42 0.01 258);
+    /* accents */
+    --chip-text: oklch(0.145 0.01 265); --green: oklch(0.70 0.09 155); --accent: oklch(0.80 0.11 225);
+    --link-hover: oklch(0.86 0.11 225);
+    /* raw "L C H" (need per-call alpha) */
+    --crit: 0.70 0.20 25; --warn: 0.83 0.15 78; --go: 0.79 0.15 155;
+    --active: 0.80 0.11 225; --neutral: 0.76 0.03 255; --dim: 0.60 0.02 258;
+    --purple: 0.74 0.11 292; --draft: 0.62 0.02 258;
+    /* effects */
+    --sel: oklch(0.70 0.20 25 / 0.30); --glow: oklch(0.30 0.02 265 / 0.45);
+    --card-shadow: none; --btn-shadow: none;
+  }
+  :root[data-theme="light"] {
+    --bg: oklch(0.965 0.007 258); --panel: oklch(1 0 0); --panel-2: oklch(0.977 0.005 258);
+    --btn-bg: oklch(1 0 0);
+    --border: oklch(0.90 0.008 262); --border-soft: oklch(0.92 0.006 262); --border-faint: oklch(0.90 0.006 262);
+    --divider: oklch(0.925 0.006 262); --input-border: oklch(0.88 0.008 262); --btn-border: oklch(0.89 0.008 262);
+    --title: oklch(0.24 0.02 264); --text: oklch(0.34 0.014 262); --t-strong: oklch(0.30 0.016 262);
+    --code-text: oklch(0.38 0.014 262); --t-mid: oklch(0.42 0.016 262); --text-2: oklch(0.44 0.014 262);
+    --t-mute-hi: oklch(0.50 0.014 262); --t-mute: oklch(0.50 0.014 262); --text-3: oklch(0.56 0.012 262);
+    --dim-icon: oklch(0.58 0.012 262); --t-dim: oklch(0.56 0.012 262); --label-2: oklch(0.60 0.01 262);
+    --label: oklch(0.60 0.01 262); --faint-hi: oklch(0.62 0.01 262); --faint: oklch(0.62 0.01 262);
+    --fainter: oklch(0.68 0.01 262);
+    --chip-text: oklch(0.99 0 0); --green: oklch(0.52 0.15 155); --accent: oklch(0.54 0.16 255);
+    --link-hover: oklch(0.50 0.16 250);
+    --crit: 0.57 0.22 25; --warn: 0.62 0.16 58; --go: 0.55 0.15 155;
+    --active: 0.54 0.16 255; --neutral: 0.48 0.03 262; --dim: 0.60 0.02 262;
+    --purple: 0.50 0.18 292; --draft: 0.58 0.03 262;
+    --sel: oklch(0.57 0.22 25 / 0.20); --glow: oklch(0.72 0.07 262 / 0.16);
+    --card-shadow: 0 1px 2px oklch(0.45 0.03 262 / 0.08), 0 14px 34px -12px oklch(0.42 0.05 262 / 0.16);
+    --btn-shadow: 0 1px 2px oklch(0.45 0.03 262 / 0.07);
+  }
+
+  html, body { background: var(--bg); }
+  body { color: var(--text); font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
   a { color: inherit; text-decoration: none; }
-  a.title:hover { color: oklch(0.86 0.11 225); }
+  a.title:hover { color: var(--link-hover); }
   button { font-family: inherit; }
   @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-  ::selection { background: oklch(0.70 0.20 25 / 0.30); }
+  ::selection { background: var(--sel); }
   /* scrollbar polish for the analysis pre */
   pre::-webkit-scrollbar { width: 10px; height: 10px; }
-  pre::-webkit-scrollbar-thumb { background: oklch(0.34 0.012 265); border-radius: 6px; }
+  pre::-webkit-scrollbar-thumb { background: var(--btn-border); border-radius: 6px; }
 </style>
 </head>
 <body>
-<div style="min-height:100vh; position:relative; background: oklch(0.145 0.01 265); padding: clamp(20px,4vw,44px); overflow-x:hidden;">
-  <div style="position:absolute; left:0; right:0; top:0; height:380px; z-index:0; pointer-events:none; background: radial-gradient(900px 380px at 28% -70%, oklch(0.30 0.02 265 / 0.45), transparent 72%);"></div>
+<div style="min-height:100vh; position:relative; background: var(--bg); padding: clamp(20px,4vw,44px); overflow-x:hidden;">
+  <div style="position:absolute; left:0; right:0; top:0; height:380px; z-index:0; pointer-events:none; background: radial-gradient(900px 380px at 28% -70%, var(--glow), transparent 72%);"></div>
 
   <div style="position:relative; z-index:1; max-width:1120px; margin:0 auto; display:flex; flex-direction:column; gap:22px;">
 
     <header style="display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap;">
       <div style="display:flex; align-items:center; gap:13px;">
         <span id="headDot"></span>
-        <span style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:15px; font-weight:700; letter-spacing:0.30em; text-transform:uppercase;">PR&nbsp;Watch</span>
-        <span style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:10.5px; letter-spacing:0.20em; color: oklch(0.48 0.01 258); text-transform:uppercase; padding-left:2px;">read-only</span>
+        <span style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:15px; font-weight:700; letter-spacing:0.30em; text-transform:uppercase; color: var(--title);">PR&nbsp;Watch</span>
+        <span style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:10.5px; letter-spacing:0.20em; color: var(--faint); text-transform:uppercase; padding-left:2px;">read-only</span>
       </div>
       <div style="display:flex; align-items:center; gap:16px;">
-        <span id="freshText" style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:12px; color: oklch(0.64 0.012 258); letter-spacing:0.06em;"></span>
-        <button id="addBtn" title="Watch a PR by id" style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:11.5px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color: oklch(0.72 0.012 258); background:transparent; border:1px solid oklch(0.34 0.012 265); border-radius:11px; padding:11px 15px; cursor:pointer;">＋ Watch PR</button>
-        <button id="checkBtn" title="Re-poll Azure right now" style="display:flex; align-items:center; gap:8px; font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:11.5px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color: oklch(0.95 0.006 250); background: oklch(0.24 0.012 265); border:1px solid oklch(0.34 0.012 265); border-radius:11px; padding:11px 17px; cursor:pointer;"></button>
+        <span id="freshText" style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:12px; color: var(--t-mute); letter-spacing:0.06em;"></span>
+        <button id="themeBtn" title="Switch to light mode" style="width:40px; height:40px; display:flex; align-items:center; justify-content:center; font-size:15px; color: var(--t-mid); background: var(--btn-bg); border:1px solid var(--btn-border); border-radius:11px; cursor:pointer; box-shadow: var(--btn-shadow);">☀</button>
+        <button id="addBtn" title="Watch a PR by id" style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:11.5px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color: var(--text-2); background:transparent; border:1px solid var(--btn-border); border-radius:11px; padding:11px 15px; cursor:pointer;">＋ Watch PR</button>
+        <button id="checkBtn" title="Re-poll Azure right now" style="display:flex; align-items:center; gap:8px; font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:11.5px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color: var(--text); background: var(--btn-bg); border:1px solid var(--btn-border); border-radius:11px; padding:11px 17px; cursor:pointer; box-shadow: var(--btn-shadow);"></button>
       </div>
     </header>
 
-    <div id="addBar" style="display:none; align-items:center; gap:10px; flex-wrap:wrap; padding:13px 15px; border:1px solid oklch(0.30 0.012 265); border-radius:14px; background: oklch(0.172 0.009 265);">
-      <span style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:10px; letter-spacing:0.18em; text-transform:uppercase; color: oklch(0.56 0.01 258);">Watch a PR</span>
-      <input id="addId" inputmode="numeric" autocomplete="off" placeholder="PR id" style="width:110px; font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:13px; color: oklch(0.95 0.006 250); background: oklch(0.145 0.01 265); border:1px solid oklch(0.32 0.012 265); border-radius:9px; padding:9px 12px; outline:none;" />
-      <input id="addRepo" autocomplete="off" placeholder="repo (optional)" style="width:250px; max-width:52vw; font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:13px; color: oklch(0.95 0.006 250); background: oklch(0.145 0.01 265); border:1px solid oklch(0.32 0.012 265); border-radius:9px; padding:9px 12px; outline:none;" />
-      <button onclick="submitAdd()" style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color: oklch(0.145 0.01 265); background: oklch(0.80 0.11 225); border:none; border-radius:9px; padding:9px 16px; cursor:pointer;">Add</button>
-      <button onclick="toggleAdd(false)" style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color: oklch(0.60 0.01 258); background:transparent; border:1px solid oklch(0.30 0.012 265); border-radius:9px; padding:9px 13px; cursor:pointer;">Cancel</button>
-      <span id="addErr" style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:12px; color: oklch(0.70 0.20 25);"></span>
+    <div id="addBar" style="display:none; align-items:center; gap:10px; flex-wrap:wrap; padding:13px 15px; border:1px solid var(--border); border-radius:14px; background: var(--panel-2);">
+      <span style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:10px; letter-spacing:0.18em; text-transform:uppercase; color: var(--t-dim);">Watch a PR</span>
+      <input id="addId" inputmode="numeric" autocomplete="off" placeholder="PR id" style="width:110px; font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:13px; color: var(--text); background: var(--bg); border:1px solid var(--input-border); border-radius:9px; padding:9px 12px; outline:none;" />
+      <input id="addRepo" autocomplete="off" placeholder="repo (optional)" style="width:250px; max-width:52vw; font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:13px; color: var(--text); background: var(--bg); border:1px solid var(--input-border); border-radius:9px; padding:9px 12px; outline:none;" />
+      <button onclick="submitAdd()" style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color: var(--chip-text); background: var(--accent); border:none; border-radius:9px; padding:9px 16px; cursor:pointer;">Add</button>
+      <button onclick="toggleAdd(false)" style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color: var(--text-3); background:transparent; border:1px solid var(--border); border-radius:9px; padding:9px 13px; cursor:pointer;">Cancel</button>
+      <span id="addErr" style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:12px; color: oklch(var(--crit));"></span>
     </div>
 
     <section id="hero"></section>
     <main id="cards" style="display:flex; flex-direction:column; gap:12px;"></main>
     <section id="doneSection" style="display:flex; flex-direction:column; gap:12px; margin-top:8px;"></section>
 
-    <footer style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-top:12px; padding-top:20px; border-top:1px solid oklch(0.24 0.01 265);">
+    <footer style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-top:12px; padding-top:20px; border-top:1px solid var(--border-faint);">
       <div style="display:flex; align-items:center; gap:11px;">
         <span id="footDot"></span>
-        <span id="footLabel" style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:11.5px; letter-spacing:0.16em; text-transform:uppercase; color: oklch(0.64 0.012 258);"></span>
+        <span id="footLabel" style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:11.5px; letter-spacing:0.16em; text-transform:uppercase; color: var(--t-mute);"></span>
       </div>
-      <span id="footBuilt" style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase; color: oklch(0.42 0.01 258);"></span>
+      <span id="footBuilt" style="font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase; color: var(--fainter);"></span>
     </footer>
 
   </div>
@@ -80,25 +147,27 @@
 // blocks written by check.js) + the server's /status, /check, /dismiss, /clear-done
 // and /analyze-conflict endpoints. Renders sample data when no server is reachable,
 // so this same file doubles as a self-contained preview.
+//
+// Colour lives entirely in CSS custom properties (see the <style> palette): :root is
+// the dark theme, [data-theme="light"] the light theme. Flat colours are var(--x);
+// the status tones are raw "L C H" triplets consumed by col()/cola() below so they can
+// carry per-call alpha. Theme selection + persistence is at the bottom of this script.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── design tokens (from the imported design) ────────────────────────────────
+// ── design tokens ────────────────────────────────────────────────────────────
 const MONO  = "ui-monospace,'SF Mono',Menlo,Consolas,monospace";
-const DARK  = "oklch(0.145 0.01 265)";
-const MUTE  = "oklch(0.64 0.012 258)";
-const FAINT = "oklch(0.50 0.01 258)";
-const GREEN = "oklch(0.70 0.09 155)";
+const MUTE  = "var(--t-mute)";
+const FAINT = "var(--faint-hi)";
+const GREEN = "var(--green)";
 
-const tones = {
-  crit:    { L: 0.70, C: 0.20, H: 25,  fill: true  },
-  warn:    { L: 0.83, C: 0.15, H: 78,  fill: true  },
-  go:      { L: 0.79, C: 0.15, H: 155, fill: true  },
-  active:  { L: 0.80, C: 0.11, H: 225, fill: false },
-  neutral: { L: 0.76, C: 0.03, H: 255, fill: false },
-  dim:     { L: 0.60, C: 0.02, H: 258, fill: false },
-};
-const col  = (t) => { const x = tones[t]; return `oklch(${x.L} ${x.C} ${x.H})`; };
-const cola = (t, a) => { const x = tones[t]; return `oklch(${x.L} ${x.C} ${x.H} / ${a})`; };
+// status tones -> colour. col()/cola() resolve against the active theme's raw "L C H"
+// custom property, so the same call renders correctly in both themes.
+const FILL = new Set(["crit", "warn", "go"]); // tones drawn as a solid chip vs an outline
+const col  = (t) => `oklch(var(--${t}))`;
+const cola = (t, a) => `oklch(var(--${t}) / ${a})`;
+// whether the light theme is active — drives the theme-dependent shadows/alpha the design
+// only applies on a light ground (elevation shadows that would be wrong on dark).
+function isLight() { return currentTheme() === "light"; }
 
 // design status model — rank drives sort + "needs you"; tone drives colour.
 const statusMeta = {
@@ -236,18 +305,22 @@ let CFG = { builtBy: "Micke Berg", builtByUrl: "https://mickeberg.com", approval
 function cardHtml(pr) {
   const meta = statusMeta[pr.status];
   const tone = meta.tone;
-  const fill = tones[tone].fill;
+  const fill = FILL.has(tone);
   const c = col(tone);
+  const light = isLight();
 
   const chipCommon = `flex-shrink:0;font-family:${MONO};font-size:11.5px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;border-radius:999px;padding:8px 14px;white-space:nowrap;`;
   const chipStyle = fill
-    ? chipCommon + `background:${c};color:${DARK};` + (tone === "crit" ? `box-shadow:0 0 22px ${cola("crit", 0.5)};` : "")
-    : chipCommon + `background:${cola(tone, 0.12)};color:${c};border:1px solid ${cola(tone, 0.4)};`;
+    ? chipCommon + `background:${c};color:var(--chip-text);`
+        + (tone === "crit"
+            ? `box-shadow:0 0 22px ${cola("crit", light ? 0.35 : 0.5)};`
+            : (light ? `box-shadow:0 6px 16px -6px ${cola(tone, 0.5)};` : ""))
+    : chipCommon + `background:${cola(tone, light ? 0.10 : 0.12)};color:${c};border:1px solid ${cola(tone, 0.4)};`;
 
   const accentStyle = `width:5px;align-self:stretch;border-radius:6px;background:${c};flex-shrink:0;`
-    + (tone === "crit" ? `box-shadow:0 0 20px ${cola("crit", 0.6)};` : (fill ? `box-shadow:0 0 12px ${cola(tone, 0.35)};` : ""));
+    + (tone === "crit" ? `box-shadow:0 0 20px ${cola("crit", 0.6)};` : (fill ? `box-shadow:0 0 12px ${cola(tone, light ? 0.45 : 0.35)};` : ""));
 
-  const cardStyle = `display:flex;gap:18px;padding:18px 20px;border-radius:16px;box-sizing:border-box;background:oklch(0.198 0.011 265);border:1px solid ${fill ? cola(tone, 0.34) : "oklch(0.30 0.012 265)"};opacity:${pr.isDraft ? 0.72 : 1};`;
+  const cardStyle = `display:flex;gap:18px;padding:18px 20px;border-radius:16px;box-sizing:border-box;background:var(--panel);border:1px solid ${fill ? cola(tone, light ? 0.28 : 0.34) : "var(--border)"};box-shadow:var(--card-shadow);opacity:${pr.isDraft ? 0.72 : 1};`;
 
   const valBase = `font-family:${MONO};font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;`;
 
@@ -283,40 +356,40 @@ function cardHtml(pr) {
       <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap;">
         <div style="min-width:0; flex:1;">
           <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-            <span style="font-family:${MONO}; font-size:12.5px; color: oklch(0.64 0.012 258); letter-spacing:0.05em;">#${pr.id}</span>
-            ${pr.isDraft ? `<span style="font-family:${MONO}; font-size:9.5px; font-weight:700; letter-spacing:0.16em; text-transform:uppercase; color: oklch(0.62 0.02 258); border:1px solid oklch(0.62 0.02 258 / 0.4); border-radius:5px; padding:2px 7px;">Draft</span>` : ""}
+            <span style="font-family:${MONO}; font-size:12.5px; color: var(--t-mute); letter-spacing:0.05em;">#${pr.id}</span>
+            ${pr.isDraft ? `<span style="font-family:${MONO}; font-size:9.5px; font-weight:700; letter-spacing:0.16em; text-transform:uppercase; color: oklch(var(--draft)); border:1px solid oklch(var(--draft) / 0.4); border-radius:5px; padding:2px 7px;">Draft</span>` : ""}
           </div>
-          <a class="title" href="${esc(pr.url)}" target="_blank" rel="noopener" style="display:inline-block; font-size: clamp(16px,1.5vw,19px); font-weight:600; line-height:1.3; color: oklch(0.96 0.006 250); text-wrap:pretty;">${esc(pr.title)}</a>
+          <a class="title" href="${esc(pr.url)}" target="_blank" rel="noopener" style="display:inline-block; font-size: clamp(16px,1.5vw,19px); font-weight:600; line-height:1.3; color: var(--title); text-wrap:pretty;">${esc(pr.title)}</a>
         </div>
         <span style="${chipStyle}">${meta.label}</span>
       </div>
 
-      <div style="display:flex; align-items:center; gap:14px; font-family:${MONO}; font-size:11px; letter-spacing:0.08em; color: oklch(0.56 0.01 258); text-transform:uppercase; flex-wrap:wrap;">
-        <span>Base&nbsp;&nbsp;<span style="color: oklch(0.78 0.012 258);">${esc(pr.base)}</span></span>
+      <div style="display:flex; align-items:center; gap:14px; font-family:${MONO}; font-size:11px; letter-spacing:0.08em; color: var(--t-dim); text-transform:uppercase; flex-wrap:wrap;">
+        <span>Base&nbsp;&nbsp;<span style="color: var(--t-mid);">${esc(pr.base)}</span></span>
         <span style="opacity:0.45;">·</span>
-        <span>Opened&nbsp;&nbsp;<span style="color: oklch(0.78 0.012 258);">${esc(pr.opened)}</span></span>
+        <span>Opened&nbsp;&nbsp;<span style="color: var(--t-mid);">${esc(pr.opened)}</span></span>
       </div>
 
-      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(128px,1fr)); gap:16px; border-top:1px solid oklch(0.29 0.01 265); padding-top:15px;">
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(128px,1fr)); gap:16px; border-top:1px solid var(--divider); padding-top:15px;">
         <div style="display:flex; flex-direction:column; gap:5px; min-width:0;">
-          <span style="font-family:${MONO}; font-size:9px; letter-spacing:0.18em; text-transform:uppercase; color: oklch(0.52 0.01 258);">CI / Build</span>
+          <span style="font-family:${MONO}; font-size:9px; letter-spacing:0.18em; text-transform:uppercase; color: var(--label);">CI / Build</span>
           <span style="${valBase} color:${ciColor};"><span style="${ciSpin}">${ciGlyph}</span>${ciWord}</span>
-          <span style="font-family:${MONO}; font-size:10.5px; color: oklch(0.48 0.01 258);">${ciSub}</span>
+          <span style="font-family:${MONO}; font-size:10.5px; color: var(--faint);">${ciSub}</span>
         </div>
         <div style="display:flex; flex-direction:column; gap:5px; min-width:0;">
-          <span style="font-family:${MONO}; font-size:9px; letter-spacing:0.18em; text-transform:uppercase; color: oklch(0.52 0.01 258);">Approvals</span>
+          <span style="font-family:${MONO}; font-size:9px; letter-spacing:0.18em; text-transform:uppercase; color: var(--label);">Approvals</span>
           <span style="${valBase} color:${apprColor};">${apprValueTxt}</span>
-          <span style="font-family:${MONO}; font-size:10.5px; color: oklch(0.48 0.01 258); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${apprNames}</span>
+          <span style="font-family:${MONO}; font-size:10.5px; color: var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${apprNames}</span>
         </div>
         <div style="display:flex; flex-direction:column; gap:5px; min-width:0;">
-          <span style="font-family:${MONO}; font-size:9px; letter-spacing:0.18em; text-transform:uppercase; color: oklch(0.52 0.01 258);">Comments</span>
+          <span style="font-family:${MONO}; font-size:9px; letter-spacing:0.18em; text-transform:uppercase; color: var(--label);">Comments</span>
           <span style="${valBase} color:${comColor};">${pr.openComments}</span>
-          <span style="font-family:${MONO}; font-size:10.5px; color: oklch(0.48 0.01 258);">${comSub}</span>
+          <span style="font-family:${MONO}; font-size:10.5px; color: var(--faint);">${comSub}</span>
         </div>
         <div style="display:flex; flex-direction:column; gap:5px; min-width:0;">
-          <span style="font-family:${MONO}; font-size:9px; letter-spacing:0.18em; text-transform:uppercase; color: oklch(0.52 0.01 258);">Mergeable</span>
+          <span style="font-family:${MONO}; font-size:9px; letter-spacing:0.18em; text-transform:uppercase; color: var(--label);">Mergeable</span>
           <span style="${valBase} color:${mergeColor};"><span>${mergeGlyph}</span>${pr.mergeable}</span>
-          <span style="font-family:${MONO}; font-size:10.5px; color: oklch(0.48 0.01 258);">${mergeSub}</span>
+          <span style="font-family:${MONO}; font-size:10.5px; color: var(--faint);">${mergeSub}</span>
         </div>
       </div>
       ${analyze}
@@ -329,11 +402,11 @@ function analyzePanelHtml(id, repo) {
   const st = analyses[prKey(id, repo)];
   const btnLabel = st && st.status === "loading" ? "Analyzing…" : st && st.status === "done" ? "Re-analyze" : "Analyze conflict";
   return `
-  <div style="border-top:1px solid oklch(0.29 0.01 265); padding-top:13px; margin-top:2px;" onclick="event.stopPropagation();event.preventDefault();">
+  <div style="border-top:1px solid var(--divider); padding-top:13px; margin-top:2px;" onclick="event.stopPropagation();event.preventDefault();">
     <button onclick="analyzeConflict('${id}', '${repo || ""}')" ${st && st.status === "loading" ? "disabled" : ""} style="font-family:${MONO}; font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:${col("crit")}; background:${cola("crit", 0.1)}; border:1px solid ${cola("crit", 0.4)}; border-radius:9px; padding:8px 13px; cursor:pointer;">${btnLabel}</button>
     ${st && st.status === "loading" ? `<span style="font-family:${MONO}; font-size:11px; color:${MUTE}; margin-left:10px;">spinning up an agent, ~1–2 min…</span>` : ""}
     ${st && st.status === "error" ? `<div style="color:${col("crit")}; font-size:12px; margin-top:10px; white-space:pre-wrap;">${esc(st.error)}</div>` : ""}
-    ${st && st.status === "done" ? `<pre style="margin:12px 0 2px; padding:14px; background:${DARK}; border:1px solid oklch(0.29 0.01 265); border-radius:10px; font-family:${MONO}; font-size:12px; line-height:1.55; color: oklch(0.85 0.008 258); white-space:pre-wrap; word-break:break-word; max-height:460px; overflow:auto;">${esc(st.markdown)}</pre>` : ""}
+    ${st && st.status === "done" ? `<pre style="margin:12px 0 2px; padding:14px; background:var(--bg); border:1px solid var(--divider); border-radius:10px; font-family:${MONO}; font-size:12px; line-height:1.55; color: var(--code-text); white-space:pre-wrap; word-break:break-word; max-height:460px; overflow:auto;">${esc(st.markdown)}</pre>` : ""}
   </div>`;
 }
 
@@ -343,6 +416,7 @@ function heroHtml(prs) {
   const anyCrit = prs.some((pr) => statusMeta[pr.status].tone === "crit");
   const heroTone = needYou > 0 ? (anyCrit ? "crit" : "warn") : "go";
   const cnt = (st) => prs.filter((pr) => pr.status === st).length;
+  const light = isLight();
 
   const segs = [];
   if (cnt("ci_failed")) segs.push(cnt("ci_failed") + " CI FAILING");
@@ -353,23 +427,24 @@ function heroHtml(prs) {
   if (cnt("comments")) segs.push(cnt("comments") + " W/ COMMENTS");
   const breakdown = segs.join("     ·     ");
 
-  const bandStyle = `display:flex; align-items:center; justify-content:space-between; gap:24px; flex-wrap:wrap; border-radius:20px; padding: clamp(22px,3vw,34px); background:${cola(heroTone, 0.07)}; border:1px solid ${cola(heroTone, 0.24)};`;
+  const bandStyle = `display:flex; align-items:center; justify-content:space-between; gap:24px; flex-wrap:wrap; border-radius:20px; padding: clamp(22px,3vw,34px); background:${cola(heroTone, light ? 0.10 : 0.07)}; border:1px solid ${cola(heroTone, light ? 0.30 : 0.24)};`
+    + (light ? `box-shadow:0 1px 2px oklch(0.45 0.03 262 / 0.05), 0 22px 48px -20px ${cola(heroTone, 0.35)};` : "");
 
   const left = needYou > 0
     ? `<span style="color:${col(heroTone)}; font-size: clamp(64px,11vw,150px); font-weight:800; line-height:0.82; letter-spacing:-0.04em;">${needYou}</span>
        <div style="display:flex; flex-direction:column; gap:9px;">
-         <span style="font-family:${MONO}; font-size: clamp(16px,2vw,22px); font-weight:700; letter-spacing:0.22em; text-transform:uppercase;">Need you</span>
-         <span style="font-family:${MONO}; font-size:12px; letter-spacing:0.08em; color: oklch(0.66 0.012 258);">${breakdown}</span>
+         <span style="font-family:${MONO}; font-size: clamp(16px,2vw,22px); font-weight:700; letter-spacing:0.22em; text-transform:uppercase; color: var(--title);">Need you</span>
+         <span style="font-family:${MONO}; font-size:12px; letter-spacing:0.08em; color: var(--t-mute-hi);">${breakdown}</span>
        </div>`
     : `<span style="color:${col("go")}; font-size: clamp(50px,8vw,104px); line-height:0.9;">✓</span>
        <div style="display:flex; flex-direction:column; gap:9px;">
-         <span style="font-family:${MONO}; font-size: clamp(20px,3vw,30px); font-weight:700; letter-spacing:0.18em; text-transform:uppercase;">All clear</span>
-         <span style="font-family:${MONO}; font-size:12px; letter-spacing:0.08em; color: oklch(0.66 0.012 258);">Nothing needs you right now</span>
+         <span style="font-family:${MONO}; font-size: clamp(20px,3vw,30px); font-weight:700; letter-spacing:0.18em; text-transform:uppercase; color: var(--title);">All clear</span>
+         <span style="font-family:${MONO}; font-size:12px; letter-spacing:0.08em; color: var(--t-mute-hi);">Nothing needs you right now</span>
        </div>`;
 
   const statReview = prs.filter((pr) => ["in_review", "needs_approval"].includes(pr.status)).length;
   const statDraft = prs.filter((pr) => pr.isDraft).length;
-  const stat = (v, l) => `<div style="display:flex; flex-direction:column; align-items:flex-end; gap:5px;"><span style="font-family:${MONO}; font-size:26px; font-weight:700; color: oklch(0.90 0.008 258);">${v}</span><span style="font-family:${MONO}; font-size:9.5px; letter-spacing:0.18em; text-transform:uppercase; color: oklch(0.54 0.01 258);">${l}</span></div>`;
+  const stat = (v, l) => `<div style="display:flex; flex-direction:column; align-items:flex-end; gap:5px;"><span style="font-family:${MONO}; font-size:26px; font-weight:700; color: var(--t-strong);">${v}</span><span style="font-family:${MONO}; font-size:9.5px; letter-spacing:0.18em; text-transform:uppercase; color: var(--label-2);">${l}</span></div>`;
 
   return { needYou, html: `<section style="${bandStyle}">
       <div style="display:flex; align-items:center; gap:24px; min-width:0;">${left}</div>
@@ -382,26 +457,26 @@ function doneSectionHtml(done) {
   const rowHtml = (d) => {
     const merged = d.outcome === "merged";
     const oStyle = merged
-      ? `color: oklch(0.74 0.11 292); border:1px solid oklch(0.74 0.11 292 / 0.4); background: oklch(0.74 0.11 292 / 0.12);`
+      ? `color: oklch(var(--purple)); border:1px solid oklch(var(--purple) / 0.4); background: oklch(var(--purple) / 0.12);`
       : `color:${MUTE}; border:1px solid ${cola("dim", 0.4)}; background:${cola("dim", 0.12)};`;
-    return `<div style="display:flex; align-items:center; gap:14px; padding:12px 16px; border-radius:12px; background: oklch(0.172 0.009 265); border:1px solid oklch(0.26 0.01 265);">
+    return `<div style="display:flex; align-items:center; gap:14px; padding:12px 16px; border-radius:12px; background: var(--panel-2); border:1px solid var(--border-soft);">
       <span style="flex-shrink:0; font-family:${MONO}; font-size:9.5px; font-weight:700; letter-spacing:0.14em; border-radius:6px; padding:4px 9px; ${oStyle}">${merged ? "MERGED" : "ABANDONED"}</span>
-      <span style="flex-shrink:0; font-family:${MONO}; font-size:12px; color: oklch(0.56 0.01 258);">#${d.id}</span>
-      <a href="${esc(d.url)}" target="_blank" rel="noopener" style="flex:1; min-width:0; font-size:14px; color: oklch(0.72 0.008 258); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(d.title)}</a>
-      <span style="flex-shrink:0; font-family:${MONO}; font-size:10.5px; color: oklch(0.48 0.01 258); letter-spacing:0.06em;">${esc(d.when)}</span>
-      <button onclick="dismiss('${d.id}', '${d.repo || ""}')" title="Remove from dashboard" style="flex-shrink:0; width:29px; height:29px; display:flex; align-items:center; justify-content:center; border-radius:8px; background:transparent; border:1px solid oklch(0.30 0.01 265); color: oklch(0.58 0.01 258); cursor:pointer; font-size:12px;">✕</button>
+      <span style="flex-shrink:0; font-family:${MONO}; font-size:12px; color: var(--t-dim);">#${d.id}</span>
+      <a href="${esc(d.url)}" target="_blank" rel="noopener" style="flex:1; min-width:0; font-size:14px; color: var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(d.title)}</a>
+      <span style="flex-shrink:0; font-family:${MONO}; font-size:10.5px; color: var(--faint); letter-spacing:0.06em;">${esc(d.when)}</span>
+      <button onclick="dismiss('${d.id}', '${d.repo || ""}')" title="Remove from dashboard" style="flex-shrink:0; width:29px; height:29px; display:flex; align-items:center; justify-content:center; border-radius:8px; background:transparent; border:1px solid var(--border); color: var(--dim-icon); cursor:pointer; font-size:12px;">✕</button>
     </div>`;
   };
   const body = done.length
     ? `<div style="display:flex; flex-direction:column; gap:8px;">${done.map(rowHtml).join("")}</div>`
-    : `<div style="font-family:${MONO}; font-size:12px; color: oklch(0.42 0.01 258); padding:15px 16px; border:1px dashed oklch(0.26 0.01 265); border-radius:12px;">No completed pull requests</div>`;
+    : `<div style="font-family:${MONO}; font-size:12px; color: var(--fainter); padding:15px 16px; border:1px dashed var(--border-soft); border-radius:12px;">No completed pull requests</div>`;
   return `
     <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
       <div style="display:flex; align-items:center; gap:12px;">
-        <span style="font-family:${MONO}; font-size:11px; letter-spacing:0.24em; text-transform:uppercase; color: oklch(0.56 0.01 258);">Done</span>
-        <span style="font-family:${MONO}; font-size:11px; color: oklch(0.42 0.01 258);">${done.length}</span>
+        <span style="font-family:${MONO}; font-size:11px; letter-spacing:0.24em; text-transform:uppercase; color: var(--t-dim);">Done</span>
+        <span style="font-family:${MONO}; font-size:11px; color: var(--fainter);">${done.length}</span>
       </div>
-      <button onclick="clearDone()" style="font-family:${MONO}; font-size:10.5px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color: oklch(0.60 0.01 258); background:transparent; border:1px solid oklch(0.30 0.01 265); border-radius:9px; padding:8px 13px; cursor:pointer;">Clear all</button>
+      <button onclick="clearDone()" style="font-family:${MONO}; font-size:10.5px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color: var(--text-3); background:transparent; border:1px solid var(--border); border-radius:9px; padding:8px 13px; cursor:pointer;">Clear all</button>
     </div>
     ${body}`;
 }
@@ -447,12 +522,14 @@ function setAppBadge(n) {
 
 // Ambient awareness: the favicon carries a red notification dot whenever something needs
 // you, so a pinned tab tells you at a glance without switching to it (pairs with the tab
-// title above). Cleared back to plain 👀 when nothing does.
+// title above). Cleared back to plain 👀 when nothing does. The dot's ring follows the
+// theme so it reads on both a light and a dark tab strip.
 function setFavicon(alert) {
   const link = document.querySelector("link[rel='icon']");
   if (!link) return;
+  const stroke = isLight() ? "#eef0f4" : "#141117";
   const eyes = "<text y='.9em' font-size='90'>👀</text>";
-  const dot = alert ? "<circle cx='80' cy='22' r='22' fill='#ff453a' stroke='#141117' stroke-width='7'/>" : "";
+  const dot = alert ? "<circle cx='80' cy='22' r='22' fill='#ff453a' stroke='" + stroke + "' stroke-width='7'/>" : "";
   const svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>" + eyes + dot + "</svg>";
   const href = "data:image/svg+xml," + encodeURIComponent(svg);
   if (link.href !== href) link.href = href; // only touch the DOM when it actually changes
@@ -578,6 +655,40 @@ async function analyzeConflict(id, repo) {
   render();
 }
 
+// ── theme (light / dark) ─────────────────────────────────────────────────────
+// Selection precedence: an explicit stored choice wins; otherwise follow the OS. The
+// toggle pins a choice to localStorage; while unpinned we track OS changes live. The
+// flat palette is pure CSS (see <style>); JS only sets <html data-theme>, keeps the
+// theme-color meta + favicon in sync, and re-renders so the theme-dependent shadows
+// (which need a tone colour + alpha) recompute.
+const THEME_KEY = "prwatch-theme";
+const mqLight = window.matchMedia("(prefers-color-scheme: light)");
+function storedTheme() {
+  try { const v = localStorage.getItem(THEME_KEY); return v === "light" || v === "dark" ? v : null; } catch (e) { return null; }
+}
+function currentTheme() { return storedTheme() || (mqLight.matches ? "light" : "dark"); }
+function applyTheme() {
+  const t = currentTheme();
+  document.documentElement.setAttribute("data-theme", t);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", t === "light" ? "#f1f1f4" : "#131118");
+  syncThemeBtn(t);
+  render(); // recompute theme-dependent shadows/alpha + favicon
+}
+function toggleTheme() {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+  applyTheme();
+}
+function syncThemeBtn(t) {
+  const b = document.getElementById("themeBtn");
+  if (!b) return;
+  const light = (t || currentTheme()) === "light";
+  b.textContent = light ? "☾" : "☀";
+  b.title = light ? "Switch to dark mode" : "Switch to light mode";
+}
+mqLight.addEventListener("change", () => { if (!storedTheme()) applyTheme(); });
+
 // ── polling loops ────────────────────────────────────────────────────────────
 async function tick() {
   try {
@@ -607,9 +718,11 @@ async function loadConfig() {
 }
 
 document.getElementById("checkBtn").addEventListener("click", checkNow);
+document.getElementById("themeBtn").addEventListener("click", toggleTheme);
 document.getElementById("addBtn").addEventListener("click", () => toggleAdd(true));
 document.getElementById("addId").addEventListener("keydown", (e) => { if (e.key === "Enter") submitAdd(); });
 
+applyTheme();  // set data-theme + meta/favicon/toggle, then first render
 loadConfig();
 tick();
 pollStatusTick();
