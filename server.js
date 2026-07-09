@@ -52,21 +52,28 @@ function readState() {
 function writeState(state) {
   fs.writeFileSync(STATE, JSON.stringify(state, null, 2) + "\n");
 }
-function findWatchedPr(id) {
-  return (readState().watching || []).find((p) => String(p.id) === String(id));
+// Identify a watched PR. PR numbers aren't unique across repos, so when a repo is given
+// it must match too; without one (legacy CLI/curl callers) we fall back to id-only.
+function matchPr(p, id, repo) {
+  return String(p.id) === String(id) && (!repo || p.repository === repo);
+}
+function findWatchedPr(id, repo) {
+  return (readState().watching || []).find((p) => matchPr(p, id, repo));
 }
 
 // Remove a single PR from the watch list (the per-card ✕ on the dashboard's Done strip).
-function handleDismiss(res, id) {
+// The dashboard sends the repo so two same-numbered PRs from different repos don't collide.
+function handleDismiss(res, id, repo) {
   if (!id) return sendJson(res, 400, { ok: false, error: "missing id" });
   let state;
   try { state = readState(); }
   catch (e) { return sendJson(res, 500, { ok: false, error: "cannot read state.json: " + e.message }); }
   const before = (state.watching || []).length;
-  state.watching = (state.watching || []).filter((p) => String(p.id) !== String(id));
-  if (state.watching.length === before) return sendJson(res, 404, { ok: false, error: `PR ${id} is not being watched` });
+  state.watching = (state.watching || []).filter((p) => !matchPr(p, id, repo));
+  const removed = before - state.watching.length;
+  if (!removed) return sendJson(res, 404, { ok: false, error: `PR ${id} is not being watched` });
   writeState(state);
-  sendJson(res, 200, { ok: true, removed: 1, watching: state.watching });
+  sendJson(res, 200, { ok: true, removed, watching: state.watching });
 }
 
 // Add a PR to the watch list by id (the dashboard's "Watch a PR" input). Enriches from
@@ -115,17 +122,19 @@ function analyzePrompt(pr, gitdir) {
   ].join("\n");
 }
 
-function handleAnalyze(res, id) {
+function handleAnalyze(res, id, repo) {
   if (!id) return sendJson(res, 400, { ok: false, error: "missing id" });
   if (!CLAUDE) return sendJson(res, 501, { ok: false, error: "conflict analysis not configured (set claudeExe in config.json)" });
   let pr;
-  try { pr = findWatchedPr(id); }
+  try { pr = findWatchedPr(id, repo); }
   catch (e) { return sendJson(res, 500, { ok: false, error: "cannot read state.json: " + e.message }); }
   if (!pr) return sendJson(res, 404, { ok: false, error: `PR ${id} is not being watched` });
-  if (analyzing.has(String(id))) return sendJson(res, 409, { ok: false, error: "analysis already running for this PR" });
+  // Lock on id+repo, not id alone, so analyzing repoA#5 doesn't block repoB#5.
+  const key = String(id) + "@" + (pr.repository || "");
+  if (analyzing.has(key)) return sendJson(res, 409, { ok: false, error: "analysis already running for this PR" });
 
   const gitdir = pr.worktree && fs.existsSync(pr.worktree) ? pr.worktree : MAIN_REPO;
-  analyzing.add(String(id));
+  analyzing.add(key);
 
   // shell:false + args array + prompt over stdin => nothing to escape, and no .cmd/shell
   // quirks. Tools are scoped to a read-only *subset* of git (the child runs with cwd set
@@ -141,11 +150,11 @@ function handleAnalyze(res, id) {
   child.stdout.on("data", (d) => (out += d));
   child.stderr.on("data", (d) => (err += d));
   child.on("error", (e) => {
-    clearTimeout(timer); analyzing.delete(String(id));
+    clearTimeout(timer); analyzing.delete(key);
     if (!res.writableEnded) sendJson(res, 500, { ok: false, error: "failed to launch claude: " + e.message });
   });
   child.on("close", (code) => {
-    clearTimeout(timer); analyzing.delete(String(id));
+    clearTimeout(timer); analyzing.delete(key);
     if (res.writableEnded) return;
     if (code === 0 && out.trim()) sendJson(res, 200, { ok: true, id: String(id), markdown: out.trim() });
     else sendJson(res, 500, { ok: false, error: (err.trim() || `claude exited with code ${code}`).slice(0, 2000) });
@@ -259,11 +268,11 @@ function requestHandler(req, res) {
   if (url === "/check") return handleCheck(res);
   if (url === "/analyze-conflict") {
     const q = new URLSearchParams(req.url.split("?")[1] || "");
-    return handleAnalyze(res, q.get("id"));
+    return handleAnalyze(res, q.get("id"), q.get("repo"));
   }
   if (url === "/dismiss") {
     const q = new URLSearchParams(req.url.split("?")[1] || "");
-    return handleDismiss(res, q.get("id"));
+    return handleDismiss(res, q.get("id"), q.get("repo"));
   }
   if (url === "/watch") {
     const q = new URLSearchParams(req.url.split("?")[1] || "");
@@ -295,4 +304,4 @@ if (require.main === module) {
   );
 }
 
-module.exports = { hostAllowed, csrfSafe, staticFileFor, requestHandler };
+module.exports = { hostAllowed, csrfSafe, staticFileFor, requestHandler, matchPr };
