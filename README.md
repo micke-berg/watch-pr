@@ -20,9 +20,9 @@ Node plus your host's own CLI (`az` / `gh`).
 
 - A live dashboard at `http://localhost:7878` — one card per PR (CI, approvals, unresolved
   comments, mergeable), sorted most-urgent-first, with a "needs you" counter.
-- **Ambient awareness** — the browser tab shows `🔴 watch-pr (N)` and the favicon carries a red
-  dot whenever something needs you, so a pinned tab tells you at a glance without switching to it.
-  Both clear back to plain 👀 when nothing does.
+- **Ambient awareness** — the favicon carries a red dot whenever something needs you (and the tab
+  title shows the count, `watch-pr (N)`), so a pinned tab tells you at a glance without switching to
+  it. The favicon clears back to plain 👀 when nothing does.
 - A resident poller that keeps it fresh and fires notifications with no editor/agent running.
 - Merged/abandoned PRs auto-tidy into a "Done" strip and expire after 24h.
 - **＋ Watch PR** — add any PR by id; monitored just like the rest.
