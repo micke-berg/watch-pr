@@ -21,6 +21,9 @@ Node plus your host's own CLI (`az` / `gh`).
 - A resident poller that keeps it fresh and fires notifications with no editor/agent running.
 - Merged/abandoned PRs auto-tidy into a "Done" strip and expire after 24h.
 - **＋ Watch PR** — add any PR by id; monitored just like the rest.
+- **Watch all my PRs** (optional) — flip on `watchMine` and every open PR you authored, across
+  every repo, is discovered and watched automatically. A staleness cutoff keeps old
+  experiments off the board. *(GitHub only for now.)*
 
 ## How it works (the short version)
 
@@ -43,8 +46,8 @@ Node plus your host's own CLI (`az` / `gh`).
 
 ## Setup
 
-1. Clone/copy this repo anywhere on your machine, then `npm install` (there are no
-   dependencies — this just wires up `npm start`).
+1. Clone/copy this repo anywhere on your machine. There are no dependencies to install —
+   it runs on Node's standard library alone.
 2. Copy `config.example.json` → `config.json` and set at least `provider` and
    `defaultRepository`:
 
@@ -71,7 +74,10 @@ Node plus your host's own CLI (`az` / `gh`).
 
    | key | what |
    | --- | --- |
-   | `approvalsRequired` / `approvalsPreferred` | your team's approval bar |
+   | `approvalsRequired` | approvals that make a PR mergeable (the green bar). Set to your team's policy |
+   | `approvalsPreferred` | soft target that fires the one-off "ready to merge" nudge — independent of the above |
+   | `watchMine` | `true` to auto-watch every open PR you authored across all repos (GitHub only). Default `false` |
+   | `watchMineMaxAgeDays` | with `watchMine` on, skip PRs older than this many days (`0` = no limit). Default `30` |
    | `ntfyTopic` / `ntfyServer` | optional phone push (see Notifications) |
    | `port` | dashboard port (default 7878) |
    | `claudeExe` / `mainRepoDir` | optional — enables the one-click merge-conflict explainer |
@@ -109,6 +115,10 @@ Keep it running from every login. An empty watch list makes zero network calls, 
 ## Adding PRs
 
 - Click **＋ Watch PR** on the dashboard and enter a PR id (+ optional repo).
+- Or set `"watchMine": true` to auto-watch every open PR you authored across all repos —
+  no manual adding. New PRs are picked up on the poll cadence; `watchMineMaxAgeDays`
+  (default 30) keeps stale ones off the board. Manually added PRs are never age-filtered.
+  *(GitHub only — the Azure adapter doesn't list your PRs yet.)*
 - Or edit `state.json` directly.
 
 ## Files
@@ -139,7 +149,7 @@ Everything above a small **neutral contract** is host-agnostic. An adapter only 
 provider.me                       // your identity (own comments never ping you)
 provider.prUrl(repo, id)          // web URL for a PR
 provider.decodePr(id, repo)       // -> the neutral decoded shape (status, ci, approvals, threads, …)
-provider.listMyOpenPrs?()         // optional: [{ id, repo }] for a "watch all my PRs" mode
+provider.listMyOpenPrs?()         // optional: [{ id, repo, createdAt }] — powers watchMine
 ```
 
 `decodePr` returns a fixed shape (prStatus, mergeable, isDraft, ci, approvals,

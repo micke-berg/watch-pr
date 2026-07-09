@@ -55,6 +55,24 @@ test("diffLoop: a steady tick reports no changes and no notifications", () => {
   assert.equal(Object.values(r.actionNeeded).some(Boolean), false);
 });
 
+test("phaseFor: maps decoded status to lifecycle phase", () => {
+  assert.equal(check.phaseFor(decoded({ prStatus: "completed" })), "done");
+  assert.equal(check.phaseFor(decoded({ prStatus: "abandoned" })), "done");
+  assert.equal(check.phaseFor(decoded({ ci: "running" })), "ci");
+  assert.equal(check.phaseFor(decoded({ ci: "queued" })), "ci");
+  assert.equal(check.phaseFor(decoded({ ci: "passed" })), "review");
+  assert.equal(check.phaseFor(decoded({ ci: "none" })), "review");
+});
+
+test("isWatched: matches on id AND repo (ids are not unique across repos)", () => {
+  const state = { watching: [{ id: 5, repository: "owner/a" }] };
+  assert.equal(check.isWatched(state, 5, "owner/a"), true);
+  assert.equal(check.isWatched(state, "5", "owner/a"), true);   // id compared as string
+  assert.equal(check.isWatched(state, 5, "owner/b"), false);    // same id, different repo
+  assert.equal(check.isWatched(state, 6, "owner/a"), false);
+  assert.equal(check.isWatched({}, 5, "owner/a"), false);       // no watching list
+});
+
 test("pruneDone: drops long-finished cards, keeps active + recent", () => {
   const h = (n) => new Date(Date.now() - n * 60 * 60 * 1000).toISOString();
   const state = { watching: [

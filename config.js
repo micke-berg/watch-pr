@@ -18,6 +18,11 @@ const DEFAULTS = {
   // --- GitHub ---
   ghCliPath: "",                                       // path to gh CLI; empty = "gh" (or "gh.exe" on Windows) on PATH
   // --- shared ---
+  watchMine: false,                                    // auto-watch every open PR you authored, across all
+                                                       //   repos (uses the provider's listMyOpenPrs). Off =
+                                                       //   only PRs you add by hand are watched.
+  watchMineMaxAgeDays: 30,                              // when watchMine is on, skip PRs older than this many
+                                                       //   days (0 = no limit). Manual adds are never filtered.
   defaultRepository: "",                               // used when a watched PR carries no repository
                                                        //   azure: "repo"; github: "owner/repo"
   me: "",                                              // your identity (Azure display name / GitHub login); your own
