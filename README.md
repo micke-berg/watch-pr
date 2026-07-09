@@ -167,6 +167,20 @@ Keep it running from every login. An empty watch list makes zero network calls, 
   *(GitHub only.)*
 - Or edit `state.json` directly.
 
+## Fits an agentic workflow
+
+The board is driven by a tiny local endpoint, so any automation that knows a PR just opened
+can drop it there instantly — a git hook, a CI step, or your coding agent's post-PR hook:
+
+```sh
+curl -X POST "http://localhost:7878/watch?id=$PR_ID&repo=$OWNER_REPO"
+```
+
+An agent opens the PR, the hook adds it, and the resident poller keeps it fresh (≈5 min while
+CI runs, ≈25 min in review) — so you never break focus to go check. (`watchMine` /
+`watchReviewRequests` already auto-discover on a cadence; the hook just makes a brand-new PR
+show up the instant it's created.)
+
 ## Files
 
 | file | role |
