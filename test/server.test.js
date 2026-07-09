@@ -32,3 +32,16 @@ test("staticFileFor: real files served, secrets + traversal rejected", () => {
   assert.equal(srv.staticFileFor("/config.json").status, 404); // secret: never served
   assert.equal(srv.staticFileFor("/../../etc/passwd").status, 403); // traversal
 });
+
+test("matchPr: repo disambiguates same-numbered PRs across repos", () => {
+  const a = { id: 5, repository: "owner/a" };
+  const b = { id: 5, repository: "owner/b" };
+  // With a repo, only the matching repo's PR is hit (the collision fix).
+  assert.equal(srv.matchPr(a, 5, "owner/a"), true);
+  assert.equal(srv.matchPr(b, 5, "owner/a"), false);
+  assert.equal(srv.matchPr(a, "5", "owner/a"), true); // id compared as string
+  // Without a repo (legacy CLI/curl), fall back to id-only.
+  assert.equal(srv.matchPr(a, 5, undefined), true);
+  assert.equal(srv.matchPr(a, 5, ""), true);
+  assert.equal(srv.matchPr(a, 6, "owner/a"), false); // wrong id
+});

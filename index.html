@@ -165,6 +165,7 @@ function activeVM(e) {
     status: statusOf(d),
     url: d.url || "#",
     prStatus: d.prStatus || "active",
+    repo: e.repository || "",
   };
 }
 function doneVM(e) {
@@ -176,6 +177,7 @@ function doneVM(e) {
     outcome: merged ? "merged" : "abandoned",
     when: (merged ? "merged " : "abandoned ") + agoShort(e.doneAt || d.updatedAt) + " ago",
     url: d.url || "#",
+    repo: e.repository || "",
   };
 }
 const isDoneEntry = (e) => {
@@ -205,7 +207,9 @@ let latest = null;         // parsed state.json, or "error"
 let everLoaded = false;    // have we ever successfully read real state?
 let pollAlive = null;      // /status payload, or null
 let checking = false;      // /check request in flight
-const analyses = {};       // pr.id -> { status, markdown?, error? }
+const analyses = {};       // prKey(id,repo) -> { status, markdown?, error? }
+// PR numbers aren't unique across repos, so key everything on id+repo, not id alone.
+const prKey = (id, repo) => String(id) + "@" + (repo || "");
 // presentation config (overridden by the server's /config; defaults keep the standalone
 // file looking right). Attribution + approval thresholds live here so nothing is hardcoded.
 let CFG = { builtBy: "Micke Berg", builtByUrl: "https://mickeberg.com", approvalsRequired: 1, approvalsPreferred: 2, defaultRepository: "" };
@@ -252,7 +256,7 @@ function cardHtml(pr) {
   const mergeGlyph = pr.mergeable === "conflicts" ? "✕" : "✓";
   const mergeSub = pr.mergeable === "conflicts" ? "rebase needed" : "no conflicts";
 
-  const analyze = (pr.mergeable === "conflicts" && pr.prStatus === "active") ? analyzePanelHtml(pr.id) : "";
+  const analyze = (pr.mergeable === "conflicts" && pr.prStatus === "active") ? analyzePanelHtml(pr.id, pr.repo) : "";
 
   return `
   <article style="${cardStyle}">
@@ -303,12 +307,12 @@ function cardHtml(pr) {
 }
 
 // conflict analyzer — preserved from the previous dashboard, restyled to the theme
-function analyzePanelHtml(id) {
-  const st = analyses[id];
+function analyzePanelHtml(id, repo) {
+  const st = analyses[prKey(id, repo)];
   const btnLabel = st && st.status === "loading" ? "Analyzing…" : st && st.status === "done" ? "Re-analyze" : "Analyze conflict";
   return `
   <div style="border-top:1px solid oklch(0.29 0.01 265); padding-top:13px; margin-top:2px;" onclick="event.stopPropagation();event.preventDefault();">
-    <button onclick="analyzeConflict('${id}')" ${st && st.status === "loading" ? "disabled" : ""} style="font-family:${MONO}; font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:${col("crit")}; background:${cola("crit", 0.1)}; border:1px solid ${cola("crit", 0.4)}; border-radius:9px; padding:8px 13px; cursor:pointer;">${btnLabel}</button>
+    <button onclick="analyzeConflict('${id}', '${repo || ""}')" ${st && st.status === "loading" ? "disabled" : ""} style="font-family:${MONO}; font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:${col("crit")}; background:${cola("crit", 0.1)}; border:1px solid ${cola("crit", 0.4)}; border-radius:9px; padding:8px 13px; cursor:pointer;">${btnLabel}</button>
     ${st && st.status === "loading" ? `<span style="font-family:${MONO}; font-size:11px; color:${MUTE}; margin-left:10px;">spinning up an agent, ~1–2 min…</span>` : ""}
     ${st && st.status === "error" ? `<div style="color:${col("crit")}; font-size:12px; margin-top:10px; white-space:pre-wrap;">${esc(st.error)}</div>` : ""}
     ${st && st.status === "done" ? `<pre style="margin:12px 0 2px; padding:14px; background:${DARK}; border:1px solid oklch(0.29 0.01 265); border-radius:10px; font-family:${MONO}; font-size:12px; line-height:1.55; color: oklch(0.85 0.008 258); white-space:pre-wrap; word-break:break-word; max-height:460px; overflow:auto;">${esc(st.markdown)}</pre>` : ""}
@@ -366,7 +370,7 @@ function doneSectionHtml(done) {
       <span style="flex-shrink:0; font-family:${MONO}; font-size:12px; color: oklch(0.56 0.01 258);">#${d.id}</span>
       <a href="${esc(d.url)}" target="_blank" rel="noopener" style="flex:1; min-width:0; font-size:14px; color: oklch(0.72 0.008 258); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(d.title)}</a>
       <span style="flex-shrink:0; font-family:${MONO}; font-size:10.5px; color: oklch(0.48 0.01 258); letter-spacing:0.06em;">${esc(d.when)}</span>
-      <button onclick="dismiss('${d.id}')" title="Remove from dashboard" style="flex-shrink:0; width:29px; height:29px; display:flex; align-items:center; justify-content:center; border-radius:8px; background:transparent; border:1px solid oklch(0.30 0.01 265); color: oklch(0.58 0.01 258); cursor:pointer; font-size:12px;">✕</button>
+      <button onclick="dismiss('${d.id}', '${d.repo || ""}')" title="Remove from dashboard" style="flex-shrink:0; width:29px; height:29px; display:flex; align-items:center; justify-content:center; border-radius:8px; background:transparent; border:1px solid oklch(0.30 0.01 265); color: oklch(0.58 0.01 258); cursor:pointer; font-size:12px;">✕</button>
     </div>`;
   };
   const body = done.length
@@ -475,8 +479,9 @@ async function checkNow() {
   checking = false;
   render();
 }
-async function dismiss(id) {
-  try { await fetch("/dismiss?id=" + encodeURIComponent(id), { method: "POST", cache: "no-store" }); } catch (e) {}
+async function dismiss(id, repo) {
+  const q = "/dismiss?id=" + encodeURIComponent(id) + (repo ? "&repo=" + encodeURIComponent(repo) : "");
+  try { await fetch(q, { method: "POST", cache: "no-store" }); } catch (e) {}
   tick();
 }
 async function clearDone() {
@@ -511,15 +516,17 @@ async function submitAdd() {
     err.style.color = col("crit"); err.textContent = "request failed — is the server running?";
   }
 }
-async function analyzeConflict(id) {
-  analyses[id] = { status: "loading" };
+async function analyzeConflict(id, repo) {
+  const k = prKey(id, repo);
+  analyses[k] = { status: "loading" };
   render();
   try {
-    const res = await fetch("/analyze-conflict?id=" + encodeURIComponent(id), { method: "POST", cache: "no-store" });
+    const q = "/analyze-conflict?id=" + encodeURIComponent(id) + (repo ? "&repo=" + encodeURIComponent(repo) : "");
+    const res = await fetch(q, { method: "POST", cache: "no-store" });
     const data = await res.json();
-    analyses[id] = data && data.ok ? { status: "done", markdown: data.markdown } : { status: "error", error: (data && data.error) || ("HTTP " + res.status) };
+    analyses[k] = data && data.ok ? { status: "done", markdown: data.markdown } : { status: "error", error: (data && data.error) || ("HTTP " + res.status) };
   } catch (e) {
-    analyses[id] = { status: "error", error: String(e) };
+    analyses[k] = { status: "error", error: String(e) };
   }
   render();
 }
