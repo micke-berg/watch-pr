@@ -139,7 +139,7 @@ build step and no front-end dependencies — so it stays zero-install and audita
 file. That constraint is a feature, not a shortcut.
 
 Endpoints (all local): `/status`, `/config`, `POST /check`, `POST /watch?id=&repo=`,
-`POST /dismiss?id=`, `POST /clear-done`, `POST /analyze-conflict?id=`.
+`POST /dismiss?id=&repo=`, `POST /clear-done`, `POST /analyze-conflict?id=&repo=`.
 
 ## The provider seam
 
