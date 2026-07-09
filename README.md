@@ -23,6 +23,9 @@ Node plus your host's own CLI (`az` / `gh`).
 - **Ambient awareness** — the favicon carries a red dot whenever something needs you (and the tab
   title shows the count, `watch-pr (N)`), so a pinned tab tells you at a glance without switching to
   it. The favicon clears back to plain 👀 when nothing does.
+- **Light and dark theme** — follows your OS by default, with a ☀/☾ toggle in the header that
+  remembers your choice (per browser). Dark is the original look, unchanged; light is a full
+  re-theme, not a washed-out dark. The favicon dot and the status tones stay legible in both.
 - A resident poller that keeps it fresh and fires notifications with no editor/agent running.
 - Merged/abandoned PRs auto-tidy into a "Done" strip and expire after 24h.
 - **＋ Watch PR** — add any PR by id; monitored just like the rest.
