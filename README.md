@@ -51,8 +51,10 @@ Node plus your host's own CLI (`az` / `gh`).
 
 ## Quickstart
 
-GitHub, on macOS or Linux (Windows: same, but launch with `dashboard.cmd`). Needs
-[Node.js 18+](https://nodejs.org) and the [GitHub CLI](https://cli.github.com):
+The example below is **GitHub on macOS/Linux**. **Azure DevOps:** set `"provider": "azure"`
+plus your org/project instead ([Setup](#setup)). **Windows:** same, but launch with
+`dashboard.cmd`. Needs [Node.js 18+](https://nodejs.org) and your host CLI
+([`gh`](https://cli.github.com) / `az`):
 
 ```sh
 gh auth login                                     # once, if you haven't already
@@ -62,9 +64,8 @@ cp config.example.json config.json                # then set "defaultRepository"
 npm start                                          # dashboard → http://localhost:7878
 ```
 
-Add PRs with the dashboard's **＋ Watch PR** button, or set `"watchMine": true` in
-`config.json` to auto-watch every open PR you authored. Azure DevOps, always-on-at-login,
-phone push, and the full list of settings are in [Setup](#setup) and below.
+Your PRs appear on their own once you set `"watchMine": true` (see [Adding PRs](#adding-prs)).
+Always-on-at-login, phone push, and the full list of settings are in [Setup](#setup) and below.
 
 > Using an AI coding agent? This README is written to be read top-to-bottom by one — point
 > it at the repo and the steps above are all it needs (you'll still run `gh auth login`
@@ -170,15 +171,16 @@ Keep it running from every login. An empty watch list makes zero network calls, 
 
 ## Adding PRs
 
-- Click **＋ Watch PR** on the dashboard and enter a PR id (+ optional repo).
-- Or set `"watchMine": true` to auto-watch every open PR you authored across all repos —
-  no manual adding. New PRs are picked up on the poll cadence; `watchMineMaxAgeDays`
-  (default 30) keeps stale ones off the board. Manually added PRs are never age-filtered.
-  *(GitHub only — the Azure adapter doesn't list your PRs yet.)*
-- Or set `"watchReviewRequests": true` to auto-watch every open PR waiting on your review.
-  Each one shows a **review requested** card and clears itself once you've reviewed it.
-  *(GitHub only.)*
-- Or edit `state.json` directly.
+Most-to-least automatic:
+
+- **Auto** — with `watchMine` / `watchReviewRequests` on, your PRs and the PRs awaiting your
+  review appear on their own (see [What you get](#what-you-get)). `watchMineMaxAgeDays`
+  (default 30) keeps stale ones off the board; manually added PRs are never age-filtered.
+- **By id** — click **＋ Watch PR** and enter a PR id (+ optional repo) to watch any single
+  PR, e.g. a colleague's you care about.
+- **From automation** — `POST /watch?id=&repo=` (see [Fits an agentic workflow](#fits-an-agentic-workflow)).
+
+Or edit `state.json` directly.
 
 ## Fits an agentic workflow
 
@@ -189,8 +191,8 @@ can drop it there instantly — a git hook, a CI step, or your coding agent's po
 curl -X POST "http://localhost:7878/watch?id=$PR_ID&repo=$OWNER_REPO"
 ```
 
-An agent opens the PR, the hook adds it, and the resident poller keeps it fresh (≈5 min while
-CI runs, ≈25 min in review) — so you never break focus to go check. (`watchMine` /
+An agent opens the PR, the hook adds it, and the resident poller keeps it fresh (≈2 min while
+CI runs, ≈5 min in review) — so you never break focus to go check. (`watchMine` /
 `watchReviewRequests` already auto-discover on a cadence; the hook just makes a brand-new PR
 show up the instant it's created.)
 
@@ -216,7 +218,7 @@ Endpoints (all local): `/status`, `/config`, `POST /check`, `POST /watch?id=&rep
 
 ## The provider seam
 
-Everything above a small **neutral contract** is host-agnostic. An adapter only implements:
+Everything host-specific lives behind a small **neutral contract** — an adapter implements only:
 
 ```text
 provider.me                       // your identity (own comments never ping you)
@@ -226,11 +228,9 @@ provider.listMyOpenPrs?()         // optional: [{ id, repo, createdAt }] — pow
 provider.listReviewRequestedPrs?()// optional: [{ id, repo, createdAt }] — powers watchReviewRequests
 ```
 
-`decodePr` returns a fixed shape (prStatus, mergeable, isDraft, ci, approvals,
-changesRequested, openComments, threads, ready, …). The core turns that into the card the
-dashboard renders and the edge-triggered notifications — and never learns which host it
-came from. Adding another host (GitLab, Bitbucket, …) is a new file under `providers/`,
-nothing else.
+The core turns that neutral shape into the cards and the edge-triggered notifications, never
+learning which host it came from. Adding a host (GitLab, Bitbucket, …) is one new file under
+`providers/`, nothing else.
 
 ## Safety
 
