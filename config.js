@@ -25,7 +25,7 @@ const DEFAULTS = {
                                                        //   days (0 = no limit). Manual adds are never filtered.
   watchReviewRequests: false,                          // auto-watch every open PR awaiting your review (uses the
                                                        //   provider's listReviewRequestedPrs). A card clears once
-                                                       //   you've reviewed it. GitHub only for now.
+                                                       //   you've reviewed it. Works on both providers.
   defaultRepository: "",                               // used when a watched PR carries no repository
                                                        //   azure: "repo"; github: "owner/repo"
   me: "",                                              // your identity (Azure display name / GitHub login); your own
