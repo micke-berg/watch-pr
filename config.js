@@ -40,7 +40,8 @@ const DEFAULTS = {
   approvalsPreferred: 2,                               // soft target shown as context
   builtBy: "",                                         // footer attribution name (empty = hidden)
   builtByUrl: "",                                      // optional link for the attribution
-  cadence: { ciSeconds: 300, reviewSeconds: 1500 },    // poll cadence per phase
+  cadence: { ciSeconds: 120, reviewSeconds: 300 },     // poll cadence per phase (~60s floor; the
+                                                       // resident poller is pure Node, so freshness, not token cost, sets these)
 };
 
 let file = {};
