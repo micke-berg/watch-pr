@@ -302,10 +302,22 @@ function requestHandler(req, res) {
 // Only start the server + resident poller when run directly (node server.js). When
 // required by a test, the module just exposes its functions with no side effects.
 if (require.main === module) {
-  pollTick(); // kick immediately: first tidy + poll, then self-schedules
-  http.createServer(requestHandler).listen(PORT, "127.0.0.1", () =>
-    console.log(`watch-pr dashboard → http://localhost:${PORT}`)
-  );
+  const server = http.createServer(requestHandler);
+  // The port is the singleton lock: only one dashboard can own it. A second start (a
+  // stray launcher, or opening it while the always-on service runs) exits cleanly here
+  // instead of crashing on an unhandled EADDRINUSE — and never polls, so it can't race
+  // the resident instance on state.json.
+  server.on("error", (e) => {
+    if (e.code === "EADDRINUSE") {
+      console.log(`watch-pr: already running on http://localhost:${PORT} — nothing to do.`);
+      process.exit(0);
+    }
+    throw e;
+  });
+  server.listen(PORT, "127.0.0.1", () => {
+    console.log(`watch-pr dashboard → http://localhost:${PORT}`);
+    pollTick(); // now that we own the port: first tidy + poll, then self-schedules
+  });
 }
 
 module.exports = { hostAllowed, csrfSafe, staticFileFor, requestHandler, matchPr };
