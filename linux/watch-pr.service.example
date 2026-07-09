@@ -1,0 +1,31 @@
+# watch-pr always-on service for Linux (systemd --user) — the Linux analog of
+# macos/com.watchpr.plist.example and Windows' pr-watch-service.vbs.
+#
+# Setup:
+#   1. Copy this file to:  ~/.config/systemd/user/watch-pr.service
+#   2. Replace NODE and both /ABSOLUTE/PATH/TO/watch-pr placeholders with real paths.
+#      Find node:  node -e "console.log(process.execPath)"
+#   3. Enable + start it, now and at every login:
+#        systemctl --user daemon-reload
+#        systemctl --user enable --now watch-pr.service
+#      (to stop:  systemctl --user disable --now watch-pr.service)
+#   4. To keep it running after you log out (optional):  loginctl enable-linger "$USER"
+#
+# systemd does NOT load your shell's environment, so gh/az won't be on PATH — set
+# ghCliPath/azCliPath to absolute paths in config.json (e.g. `which gh`), or give the
+# unit a PATH below. An empty watch list makes zero network calls, so it's idle-cheap.
+
+[Unit]
+Description=watch-pr dashboard + resident PR poller
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/ABSOLUTE/PATH/TO/watch-pr
+ExecStart=NODE /ABSOLUTE/PATH/TO/watch-pr/server.js
+Restart=on-failure
+# Uncomment and adjust if gh/az aren't found (systemd starts with a minimal PATH):
+# Environment=PATH=/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=default.target
