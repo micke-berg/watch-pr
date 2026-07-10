@@ -167,7 +167,7 @@ Keep it running from every login. An empty watch list makes zero network calls, 
   string and subscribe the ntfy app to that topic. Works identically on every OS (a plain
   HTTPS POST). Notifications are **edge-triggered** — each fires once, only for
   action-needed events: CI failed, changes requested, a blocking reviewer comment, the
-  approval target reached, and merged.
+  approval target reached, a new review request, and merged.
 
 ## Adding PRs
 
