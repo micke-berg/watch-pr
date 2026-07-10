@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // watch-pr dashboard. Visual design imported from Claude Design (PR Watch.dc.html),
 // ported to vanilla JS and wired to the live feed: state.json (per-PR `display`
-// blocks written by check.js) + the server's /status, /check, /dismiss, /clear-done
-// and /analyze-conflict endpoints. Renders sample data when no server is reachable,
+// blocks written by check.js) + the server's /status, /check, /dismiss and
+// /clear-done endpoints. Renders sample data when no server is reachable,
 // so this same file doubles as a self-contained preview.
 //
 // Colour lives entirely in CSS custom properties (see app.css): :root is the dark
@@ -149,9 +149,6 @@ let latest = null;         // parsed state.json, or "error"
 let everLoaded = false;    // have we ever successfully read real state?
 let pollAlive = null;      // /status payload, or null
 let checking = false;      // /check request in flight
-const analyses = {};       // prKey(id,repo) -> { status, markdown?, error? }
-// PR numbers aren't unique across repos, so key everything on id+repo, not id alone.
-const prKey = (id, repo) => String(id) + "@" + (repo || "");
 // presentation config (overridden by the server's /config; defaults keep the standalone
 // file looking right). Attribution + approval thresholds live here so nothing is hardcoded.
 let CFG = { builtBy: "Micke Berg", builtByUrl: "https://mickeberg.com", approvalsRequired: 1, approvalsPreferred: 2, defaultRepository: "" };
@@ -202,8 +199,6 @@ function cardHtml(pr) {
   const mergeGlyph = pr.mergeable === "conflicts" ? "✕" : "✓";
   const mergeSub = pr.mergeable === "conflicts" ? "rebase needed" : "no conflicts";
 
-  const analyze = (pr.mergeable === "conflicts" && pr.prStatus === "active") ? analyzePanelHtml(pr.id, pr.repo) : "";
-
   return `
   <article style="${cardStyle}">
     <div style="${accentStyle}"></div>
@@ -247,22 +242,8 @@ function cardHtml(pr) {
           <span style="font-family:${MONO}; font-size:10.5px; color: var(--faint);">${mergeSub}</span>
         </div>
       </div>
-      ${analyze}
     </div>
   </article>`;
-}
-
-// conflict analyzer — preserved from the previous dashboard, restyled to the theme
-function analyzePanelHtml(id, repo) {
-  const st = analyses[prKey(id, repo)];
-  const btnLabel = st && st.status === "loading" ? "Analyzing…" : st && st.status === "done" ? "Re-analyze" : "Analyze conflict";
-  return `
-  <div style="border-top:1px solid var(--divider); padding-top:13px; margin-top:2px;" onclick="event.stopPropagation();event.preventDefault();">
-    <button onclick="analyzeConflict('${id}', '${repo || ""}')" ${st && st.status === "loading" ? "disabled" : ""} style="font-family:${MONO}; font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:${col("crit")}; background:${cola("crit", 0.1)}; border:1px solid ${cola("crit", 0.4)}; border-radius:9px; padding:8px 13px; cursor:pointer;">${btnLabel}</button>
-    ${st && st.status === "loading" ? `<span style="font-family:${MONO}; font-size:11px; color:var(--t-mute); margin-left:10px;">spinning up an agent, ~1–2 min…</span>` : ""}
-    ${st && st.status === "error" ? `<div style="color:${col("crit")}; font-size:12px; margin-top:10px; white-space:pre-wrap;">${esc(st.error)}</div>` : ""}
-    ${st && st.status === "done" ? `<pre style="margin:12px 0 2px; padding:14px; background:var(--bg); border:1px solid var(--divider); border-radius:10px; font-family:${MONO}; font-size:12px; line-height:1.55; color: var(--code-text); white-space:pre-wrap; word-break:break-word; max-height:460px; overflow:auto;">${esc(st.markdown)}</pre>` : ""}
-  </div>`;
 }
 
 // ── hero band ────────────────────────────────────────────────────────────────
@@ -494,20 +475,6 @@ async function submitAdd() {
   } catch (e) {
     err.style.color = col("crit"); err.textContent = "request failed — is the server running?";
   }
-}
-async function analyzeConflict(id, repo) {
-  const k = prKey(id, repo);
-  analyses[k] = { status: "loading" };
-  render();
-  try {
-    const q = "/analyze-conflict?id=" + encodeURIComponent(id) + (repo ? "&repo=" + encodeURIComponent(repo) : "");
-    const res = await fetch(q, { method: "POST", cache: "no-store" });
-    const data = await res.json();
-    analyses[k] = data && data.ok ? { status: "done", markdown: data.markdown } : { status: "error", error: (data && data.error) || ("HTTP " + res.status) };
-  } catch (e) {
-    analyses[k] = { status: "error", error: String(e) };
-  }
-  render();
 }
 
 // ── theme (light / dark) ─────────────────────────────────────────────────────
