@@ -53,6 +53,36 @@ function assertSafeIdentity(who) {
   if (/["`$\\;&|<>%^!\r\n]/.test(String(who))) throw new Error("config.me contains characters unsafe for a shell argument");
 }
 
+// Decode Azure's reviewer votes into the neutral approval / block shape. Pure and exported so
+// the vote arithmetic is unit-tested without touching `az`. Azure votes: 10 = approved, 5 =
+// approved with suggestions, 0 = no vote, -5 = waiting for author, -10 = rejected. A container
+// reviewer is a team/group, not a person, and never counts. Crucially your OWN approval counts
+// toward the bar — on a PR you reviewed, your vote is a real approval — which is why a colleague's
+// PR you approved reads 2/2, not 1/2. Your own -5/-10 is dropped from the blockers, though: your
+// own "waiting"/"rejected" is not "someone else is waiting on you".
+function tallyVotes(reviewers, me) {
+  const people = (reviewers || []).filter((r) => !r.isContainer);
+  const approvers = people.filter((r) => r.vote === 10 || r.vote === 5);
+  const blockers = people.filter((r) => (r.vote === -5 || r.vote === -10) && (!me || r.name !== me));
+  return {
+    approvals: approvers.length,
+    approvalNames: approvers.map((r) => r.name),
+    changesRequested: blockers.length > 0,
+    blockerNames: blockers.map((r) => r.name),
+  };
+}
+
+// True while a PR is still awaiting MY review — I'm a reviewer but my vote is still 0. Azure keeps
+// you in a PR's reviewer set after you vote (unlike GitHub, which drops the review request the
+// moment you review), so the raw `--reviewer` listing includes PRs you've already voted on. This
+// is the filter that makes "awaiting my review" mean what it says, and lets the core clear the
+// reviewer card the moment you vote. No reviewer entry at all defaults to true (never silently
+// drop a review request). Pure and exported for unit tests.
+function awaitingMyReview(row, me) {
+  const mine = (row.reviewers || []).find((r) => r.name === me);
+  return !mine || !mine.vote; // no entry, or vote 0 = not yet reviewed
+}
+
 // Fresh read of one PR from Azure. Returns decoded primitives + the human comment threads.
 async function decodePr(id, repo) {
   const repository = repo || config.defaultRepository;
@@ -65,12 +95,7 @@ async function decodePr(id, repo) {
   ]);
 
   const reviewers = (show && show.reviewers) || [];
-  // Exclude your own vote — your self-approval shouldn't count toward the bar, and this
-  // matches the GitHub adapter (which excludes login === me). Container = team/group reviewer.
-  const others = reviewers.filter((r) => !r.isContainer && (!ME || r.name !== ME));
-  const approvers = others.filter((r) => r.vote === 10 || r.vote === 5);
-  // vote -5 (waiting for author) / -10 (rejected) = a reviewer is blocking / waiting on you
-  const blockers = others.filter((r) => r.vote === -5 || r.vote === -10);
+  const { approvals, approvalNames, changesRequested, blockerNames } = tallyVotes(reviewers, ME);
 
   const buildPolicy = (policies || []).find((p) => p.name === "Build");
   const buildRaw = buildPolicy ? buildPolicy.status : ""; // queued|running|approved|rejected|notApplicable|""
@@ -99,8 +124,6 @@ async function decodePr(id, repo) {
   const title = (show && show.title) || "";
   const branch = ((show && show.sourceRef) || "").replace(/^refs\/heads\//, "");
   const target = ((show && show.targetRef) || "").replace(/^refs\/heads\//, "");
-  const approvals = approvers.length;
-  const changesRequested = blockers.length > 0;
   const ci_passed = ci === "passed";
   // a draft or an outstanding "changes requested" is never "ready to merge"
   const ready = !isDraft && !changesRequested && approvals >= 1 && ci_passed && openComments === 0;
@@ -109,8 +132,8 @@ async function decodePr(id, repo) {
     prStatus, mergeStatus, mergeable: mergeStatus === "succeeded",
     isDraft, createdAt, title, branch, target,
     buildRaw, ci,
-    approvals, approvalNames: approvers.map((r) => r.name),
-    changesRequested, blockerNames: blockers.map((r) => r.name),
+    approvals, approvalNames,
+    changesRequested, blockerNames,
     openComments, threads: threadInfo, ready,
   };
 }
@@ -122,14 +145,23 @@ async function listMyOpenPrs() {
   return rowsToPrs(await listByIdentity("creator"));
 }
 
-// Optional: every open PR waiting on MY review, as [{ id, repo, createdAt }] — powers "watch
-// PRs awaiting my review" (config.watchReviewRequests). Azure drops a PR from the --reviewer
-// set the moment you vote, which is what lets the core clear the reviewer card once you act.
+// Optional: every open PR still awaiting MY review, as [{ id, repo, createdAt }] — powers "watch
+// PRs awaiting my review" (config.watchReviewRequests). Unlike GitHub, Azure does NOT drop you
+// from a PR's reviewer set when you vote — you stay a reviewer with your vote recorded — so the
+// raw `--reviewer` listing keeps returning PRs you've already reviewed. We pull each PR's reviewer
+// votes and keep only the ones where my vote is still 0; that is what lets the core clear the
+// reviewer card once I act. Identity is compared in JS (like decodePr), never in the query.
 async function listReviewRequestedPrs() {
-  return rowsToPrs(await listByIdentity("reviewer"));
+  if (!ME) throw new Error("config.me must be set to your Azure display name to use reviewer auto-discovery");
+  assertSafeIdentity(ME);
+  const rows = await az(
+    `repos pr list --reviewer "${ME}" --status active --query "[].{id:pullRequestId, repo:repository.name, createdAt:creationDate, reviewers:reviewers[].{name:displayName, vote:vote}}" -o json`
+  );
+  return rowsToPrs((rows || []).filter((r) => awaitingMyReview(r, ME)));
 }
 
-// Shared: list active PRs filtered by my identity in the given role. `me` is the same display
+// List active PRs filtered by my identity in the given role (powers listMyOpenPrs via
+// "creator"; the reviewer listing has its own vote-aware query above). `me` is the same display
 // name Azure shows; az resolves it to the account (`@me` is NOT supported by `az repos pr
 // list`). Relies on the CLI's configured org/project defaults, exactly like decodePr's calls.
 function listByIdentity(role) {
@@ -143,4 +175,4 @@ function rowsToPrs(rows) {
   return (rows || []).map((r) => ({ id: r.id, repo: r.repo || "", createdAt: r.createdAt || "" })).filter((r) => r.repo);
 }
 
-module.exports = { me: ME, prUrl, decodePr, listMyOpenPrs, listReviewRequestedPrs, assertSafeId, assertSafeRepo };
+module.exports = { me: ME, prUrl, decodePr, listMyOpenPrs, listReviewRequestedPrs, assertSafeId, assertSafeRepo, tallyVotes, awaitingMyReview };
