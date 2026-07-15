@@ -32,8 +32,6 @@ const DEFAULTS = {
                                                        //   comments never ping you. GitHub resolves it from gh if empty.
   ntfyTopic: "",                                       // optional ntfy.sh topic for a phone push (empty = no phone push)
   ntfyServer: "https://ntfy.sh",                       // ntfy server base URL (self-host or ntfy.sh)
-  claudeExe: "",                                       // full path to claude CLI for /analyze-conflict; empty disables it
-  mainRepoDir: "",                                     // git-dir fallback when a PR's worktree is gone
   port: 7878,                                          // dashboard/server port (PR_WATCH_PORT env overrides)
   doneExpireHours: 24,                                 // merged/abandoned cards auto-drop after this
   approvalsRequired: 1,                                // approvals to be mergeable (green)

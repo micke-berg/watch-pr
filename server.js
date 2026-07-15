@@ -9,7 +9,6 @@ const fs = require("fs");
 const path = require("path");
 const { runCheck, pruneDone, pollIfDue, registerPr } = require("./check.js");
 const config = require("./config.js");
-const { spawn } = require("child_process");
 
 const PORT = process.env.PR_WATCH_PORT || config.port;
 const ROOT = __dirname;
@@ -24,13 +23,6 @@ const TYPES = {
   ".ico": "image/x-icon",
   ".webmanifest": "application/manifest+json; charset=utf-8",
 };
-
-// /analyze-conflict spawns a fresh, read-only headless Claude to explain a PR's merge
-// conflict. Configured via config.json (claudeExe); empty disables the feature.
-const CLAUDE = config.claudeExe;
-const MAIN_REPO = config.mainRepoDir; // git dir fallback when a PR's worktree is gone
-const ANALYZE_TIMEOUT_MS = 5 * 60 * 1000;
-const analyzing = new Set(); // PR ids with an in-flight analysis
 
 async function handleCheck(res) {
   try {
@@ -60,9 +52,6 @@ function writeState(state) {
 // it must match too; without one (legacy CLI/curl callers) we fall back to id-only.
 function matchPr(p, id, repo) {
   return String(p.id) === String(id) && (!repo || p.repository === repo);
-}
-function findWatchedPr(id, repo) {
-  return (readState().watching || []).find((p) => matchPr(p, id, repo));
 }
 
 // Remove a single PR from the watch list (the per-card ✕ on the dashboard's Done strip).
@@ -101,70 +90,6 @@ function handleClearDone(res) {
   state.watching = (state.watching || []).filter((p) => p.phase !== "done");
   writeState(state);
   sendJson(res, 200, { ok: true, removed: before - state.watching.length, watching: state.watching });
-}
-
-// The conflict-analysis "brain" lives here as a prompt on purpose. We deliberately did NOT
-// make it a skill: a capable model already analyzes a conflict unaided (an eval showed a
-// no-skill baseline matching it), so the value is the one-click trigger, not the knowledge.
-function analyzePrompt(pr, gitdir) {
-  const target = pr.target || (pr.display && pr.display.target) || "develop";
-  return [
-    "Investigate a git merge conflict, strictly read-only, and report how to resolve it.",
-    "",
-    `PR #${pr.id}: branch "${pr.branch}" merging into "${target}".`,
-    `Git working directory: ${gitdir}`,
-    "",
-    "You are already running in that directory — use plain git commands (no -C, no cd).",
-    "",
-    "Steps (read-only only):",
-    `1. git fetch origin "${target}" "${pr.branch}"`,
-    `2. git merge-tree --write-tree --name-only "origin/${target}" "origin/${pr.branch}" — exit 1 means conflicts (first output line is the merged-tree OID, the remaining lines are the conflicting paths); exit 0 means it merges clean, so say the dashboard may be stale and stop.`,
-    `3. For each conflicting file: find the merge base (git merge-base "origin/${target}" "origin/${pr.branch}"), see what each side changed (git diff <base>..origin/<ref> -- <file>) and the conflicted region (git show <oid>:<file>).`,
-    "4. Report per file: what the target changed, what the PR changed, why they collide, a class (trivial / semantic / structural), and how to resolve it. Then give one overall strategy and the concrete commands for the user to run themselves. Call out when a rebase plus re-running a codemod beats a hand-merge.",
-    "",
-    "Do NOT modify any repository, branch, index, or working tree. Use only read-only git (fetch, merge-base, merge-tree, diff, show, log). Output the analysis as Markdown.",
-  ].join("\n");
-}
-
-function handleAnalyze(res, id, repo) {
-  if (!id) return sendJson(res, 400, { ok: false, error: "missing id" });
-  if (!CLAUDE) return sendJson(res, 501, { ok: false, error: "conflict analysis not configured (set claudeExe in config.json)" });
-  let pr;
-  try { pr = findWatchedPr(id, repo); }
-  catch (e) { return sendJson(res, 500, { ok: false, error: "cannot read state.json: " + e.message }); }
-  if (!pr) return sendJson(res, 404, { ok: false, error: `PR ${id} is not being watched` });
-  // Lock on id+repo, not id alone, so analyzing repoA#5 doesn't block repoB#5.
-  const key = String(id) + "@" + (pr.repository || "");
-  if (analyzing.has(key)) return sendJson(res, 409, { ok: false, error: "analysis already running for this PR" });
-
-  const gitdir = pr.worktree && fs.existsSync(pr.worktree) ? pr.worktree : MAIN_REPO;
-  analyzing.add(key);
-
-  // shell:false + args array + prompt over stdin => nothing to escape, and no .cmd/shell
-  // quirks. Tools are scoped to a read-only *subset* of git (the child runs with cwd set
-  // to the repo, so no `git -C` is needed) plus the read tools — this way a prompt-injected
-  // branch name can't steer the model into git push/reset/checkout/commit.
-  const READONLY_GIT = ["fetch", "merge-base", "merge-tree", "diff", "show", "log", "rev-parse", "status"]
-    .map((sub) => `Bash(git ${sub}:*)`).join(" ");
-  const child = spawn(CLAUDE, ["-p", "--allowedTools", `${READONLY_GIT} Read Grep Glob`, "--output-format", "text"], {
-    cwd: gitdir, windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
-  });
-  let out = "", err = "";
-  const timer = setTimeout(() => child.kill(), ANALYZE_TIMEOUT_MS);
-  child.stdout.on("data", (d) => (out += d));
-  child.stderr.on("data", (d) => (err += d));
-  child.on("error", (e) => {
-    clearTimeout(timer); analyzing.delete(key);
-    if (!res.writableEnded) sendJson(res, 500, { ok: false, error: "failed to launch claude: " + e.message });
-  });
-  child.on("close", (code) => {
-    clearTimeout(timer); analyzing.delete(key);
-    if (res.writableEnded) return;
-    if (code === 0 && out.trim()) sendJson(res, 200, { ok: true, id: String(id), markdown: out.trim() });
-    else sendJson(res, 500, { ok: false, error: (err.trim() || `claude exited with code ${code}`).slice(0, 2000) });
-  });
-  child.stdin.write(analyzePrompt(pr, gitdir));
-  child.stdin.end();
 }
 
 // ── Resident poller ─────────────────────────────────────────────────────────────
@@ -242,7 +167,7 @@ function csrfSafe(req) {
   }
   return true;
 }
-const MUTATING = new Set(["/check", "/watch", "/dismiss", "/clear-done", "/analyze-conflict"]);
+const MUTATING = new Set(["/check", "/watch", "/dismiss", "/clear-done"]);
 // Never serve these via the static handler even though they live in ROOT — config.json
 // holds the ntfyTopic + local paths; the dashboard uses the /config endpoint for the safe
 // subset. (state.json is intentionally served: it is the dashboard's data feed.)
@@ -270,10 +195,6 @@ function requestHandler(req, res) {
   if (url === "/status") return handleStatus(res);
   if (url === "/config") return handleConfig(res);
   if (url === "/check") return handleCheck(res);
-  if (url === "/analyze-conflict") {
-    const q = new URLSearchParams(req.url.split("?")[1] || "");
-    return handleAnalyze(res, q.get("id"), q.get("repo"));
-  }
   if (url === "/dismiss") {
     const q = new URLSearchParams(req.url.split("?")[1] || "");
     return handleDismiss(res, q.get("id"), q.get("repo"));

@@ -28,9 +28,6 @@
   "ntfyTopic": "",
   "ntfyServer": "https://ntfy.sh",
 
-  "claudeExe": "",
-  "mainRepoDir": "",
-
   "builtBy": "Your Name",
   "builtByUrl": "https://your-site.example"
 }

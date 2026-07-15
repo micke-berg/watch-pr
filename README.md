@@ -115,7 +115,6 @@ Always-on-at-login, phone push, and the full list of settings are in [Setup](#se
    | `watchReviewRequests` | `true` to auto-watch every open PR awaiting your review; each card clears once you review it. Default `false` |
    | `ntfyTopic` / `ntfyServer` | optional phone push (see Notifications) |
    | `port` | dashboard port (default 7878) |
-   | `claudeExe` / `mainRepoDir` | optional — enables the one-click merge-conflict explainer |
    | `builtBy` / `builtByUrl` | footer attribution |
 
 3. Start it:
@@ -200,7 +199,9 @@ show up the instant it's created.)
 
 | file | role |
 | --- | --- |
-| `index.html` | the dashboard (pure presentation; reads `state.json` + the endpoints) |
+| `index.html` | the dashboard markup + PWA head; loads `app.css` and `app.js` |
+| `app.css` | all styles, including both theme token sets |
+| `app.js` | all dashboard behavior (reads `state.json` + the endpoints) |
 | `check.js` | provider-agnostic poll + decode core + the notify/tidy/add-PR loop |
 | `providers/azure.js`, `providers/github.js` | the host adapters (the only host-specific code) |
 | `notify.js` / `notify.ps1` | cross-platform notifier (OS-detected) + the Windows toast helper |
@@ -209,12 +210,13 @@ show up the instant it's created.)
 | `state.json` | the watch list + per-PR snapshot the dashboard renders |
 | `pr-watch-service.vbs` / `dashboard.cmd` / `dashboard.sh` / `macos/…plist` / `linux/…service` | launchers |
 
-The dashboard is deliberately a single self-contained `index.html` — inline CSS/JS, no
-build step and no front-end dependencies — so it stays zero-install and auditable in one
-file. That constraint is a feature, not a shortcut.
+The dashboard is three plain static files — `index.html`, `app.css`, `app.js` — with no
+build step and no front-end dependencies. Nothing compiles or bundles them: the browser
+loads them as-is and the server sends them straight from disk. The whole front end stays
+zero-install and auditable by reading three files. That constraint is a feature, not a shortcut.
 
 Endpoints (all local): `/status`, `/config`, `POST /check`, `POST /watch?id=&repo=`,
-`POST /dismiss?id=&repo=`, `POST /clear-done`, `POST /analyze-conflict?id=&repo=`.
+`POST /dismiss?id=&repo=`, `POST /clear-done`.
 
 ## The provider seam
 
@@ -244,8 +246,6 @@ learning which host it came from. Adding a host (GitLab, Bitbucket, …) is one 
 - **Optional phone push leaves your machine** — if you set `ntfyTopic`, PR titles/ids are
   POSTed to your ntfy server (default `ntfy.sh`). Leave it empty to keep everything local,
   or self-host ntfy via `ntfyServer`.
-- **The conflict explainer is opt-in** — `/analyze-conflict` is disabled unless you set
-  `claudeExe`, and when enabled it runs a headless assistant scoped to read-only git.
 
 ## Tests
 
