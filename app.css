@@ -1,0 +1,68 @@
+/* watch-pr dashboard styles. Split out of index.html — no build step, plain CSS.
+   Colour lives entirely in CSS custom properties: :root is the dark theme,
+   [data-theme="light"] the light theme. app.js reads the raw "L C H" tones via
+   col()/cola() so it can add per-call alpha. This file is the canonical design-token
+   source the rest of the watch-* family copies. */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ── Theme palette ──────────────────────────────────────────────────────────
+   :root is the original dark theme, preserved value-for-value (pixel-identical).
+   [data-theme="light"] is the light theme, from the approved Claude Design handoff.
+   The theme is written to <html data-theme> in JS (stored choice, else the OS); dark is
+   the no-JS fallback. Flat colours are full oklch() values used as var(--x). The status
+   tones (crit/warn/go/active/neutral/dim) plus purple/draft are raw "L C H" triplets so
+   col()/cola() can add per-call alpha as oklch(var(--crit) / a). */
+:root {
+  /* surfaces */
+  --bg: oklch(0.145 0.01 265); --panel: oklch(0.198 0.011 265); --panel-2: oklch(0.172 0.009 265);
+  --btn-bg: oklch(0.24 0.012 265);
+  /* borders */
+  --border: oklch(0.30 0.012 265); --border-soft: oklch(0.26 0.01 265); --border-faint: oklch(0.24 0.01 265);
+  --divider: oklch(0.29 0.01 265); --input-border: oklch(0.32 0.012 265); --btn-border: oklch(0.34 0.012 265);
+  /* text ramp — distinct steps, brightest → faintest */
+  --title: oklch(0.96 0.006 250); --text: oklch(0.95 0.006 250); --t-strong: oklch(0.90 0.008 258);
+  --code-text: oklch(0.85 0.008 258); --t-mid: oklch(0.78 0.012 258); --t-soft: oklch(0.72 0.012 258);
+  --t-mute: oklch(0.64 0.012 258); --t-quiet: oklch(0.60 0.01 258); --t-dim: oklch(0.56 0.01 258);
+  --label: oklch(0.52 0.01 258); --faint: oklch(0.48 0.01 258); --fainter: oklch(0.42 0.01 258);
+  /* accents */
+  --chip-text: oklch(0.145 0.01 265); --green: oklch(0.70 0.09 155); --accent: oklch(0.80 0.11 225);
+  --link-hover: oklch(0.86 0.11 225);
+  /* raw "L C H" (need per-call alpha) */
+  --crit: 0.70 0.20 25; --warn: 0.83 0.15 78; --go: 0.79 0.15 155;
+  --active: 0.80 0.11 225; --neutral: 0.76 0.03 255; --dim: 0.60 0.02 258;
+  --purple: 0.74 0.11 292; --draft: 0.62 0.02 258;
+  /* effects */
+  --sel: oklch(0.70 0.20 25 / 0.30); --glow: oklch(0.30 0.02 265 / 0.45);
+  --card-shadow: none; --btn-shadow: none;
+}
+:root[data-theme="light"] {
+  --bg: oklch(0.965 0.007 258); --panel: oklch(1 0 0); --panel-2: oklch(0.977 0.005 258);
+  --btn-bg: oklch(1 0 0);
+  --border: oklch(0.90 0.008 262); --border-soft: oklch(0.92 0.006 262); --border-faint: oklch(0.90 0.006 262);
+  --divider: oklch(0.925 0.006 262); --input-border: oklch(0.88 0.008 262); --btn-border: oklch(0.89 0.008 262);
+  --title: oklch(0.24 0.02 264); --text: oklch(0.34 0.014 262); --t-strong: oklch(0.30 0.016 262);
+  --code-text: oklch(0.38 0.014 262); --t-mid: oklch(0.42 0.016 262); --t-soft: oklch(0.46 0.014 262);
+  --t-mute: oklch(0.50 0.014 262); --t-quiet: oklch(0.54 0.012 262); --t-dim: oklch(0.56 0.012 262);
+  --label: oklch(0.60 0.01 262); --faint: oklch(0.62 0.01 262); --fainter: oklch(0.68 0.01 262);
+  --chip-text: oklch(0.99 0 0); --green: oklch(0.52 0.15 155); --accent: oklch(0.54 0.16 255);
+  --link-hover: oklch(0.50 0.16 250);
+  --crit: 0.57 0.22 25; --warn: 0.56 0.17 55; --go: 0.52 0.16 152;
+  --active: 0.50 0.17 256; --neutral: 0.48 0.03 262; --dim: 0.60 0.02 262;
+  --purple: 0.50 0.18 292; --draft: 0.58 0.03 262;
+  --sel: oklch(0.57 0.22 25 / 0.20); --glow: oklch(0.72 0.07 262 / 0.16);
+  --card-shadow: 0 1px 2px oklch(0.45 0.03 262 / 0.08), 0 14px 34px -12px oklch(0.42 0.05 262 / 0.16);
+  --btn-shadow: 0 1px 2px oklch(0.45 0.03 262 / 0.07);
+}
+
+html, body { background: var(--bg); }
+body { color: var(--text); font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+a { color: inherit; text-decoration: none; }
+a.title:hover { color: var(--link-hover); }
+button { font-family: inherit; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+::selection { background: var(--sel); }
+/* scrollbar polish for the analysis pre */
+pre::-webkit-scrollbar { width: 10px; height: 10px; }
+pre::-webkit-scrollbar-thumb { background: var(--btn-border); border-radius: 6px; }
