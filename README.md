@@ -115,7 +115,6 @@ Always-on-at-login, phone push, and the full list of settings are in [Setup](#se
    | `watchReviewRequests` | `true` to auto-watch every open PR awaiting your review; each card clears once you review it. Default `false` |
    | `ntfyTopic` / `ntfyServer` | optional phone push (see Notifications) |
    | `port` | dashboard port (default 7878) |
-   | `claudeExe` / `mainRepoDir` | optional — enables the one-click merge-conflict explainer |
    | `builtBy` / `builtByUrl` | footer attribution |
 
 3. Start it:
@@ -217,7 +216,7 @@ loads them as-is and the server sends them straight from disk. The whole front e
 zero-install and auditable by reading three files. That constraint is a feature, not a shortcut.
 
 Endpoints (all local): `/status`, `/config`, `POST /check`, `POST /watch?id=&repo=`,
-`POST /dismiss?id=&repo=`, `POST /clear-done`, `POST /analyze-conflict?id=&repo=`.
+`POST /dismiss?id=&repo=`, `POST /clear-done`.
 
 ## The provider seam
 
@@ -247,8 +246,6 @@ learning which host it came from. Adding a host (GitLab, Bitbucket, …) is one 
 - **Optional phone push leaves your machine** — if you set `ntfyTopic`, PR titles/ids are
   POSTed to your ntfy server (default `ntfy.sh`). Leave it empty to keep everything local,
   or self-host ntfy via `ntfyServer`.
-- **The conflict explainer is opt-in** — `/analyze-conflict` is disabled unless you set
-  `claudeExe`, and when enabled it runs a headless assistant scoped to read-only git.
 
 ## Tests
 
