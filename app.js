@@ -336,11 +336,12 @@ function render() {
   document.getElementById("hero").innerHTML = hero.html;
   document.getElementById("cards").innerHTML = prs.map(cardHtml).join("");
   document.getElementById("doneSection").innerHTML = doneSectionHtml(done);
-  // The favicon carries the 👀 / red-dot status, so the title stays plain text + count —
-  // no emoji here, or the tab shows the eyes twice (favicon image + title emoji).
-  document.title = hero.needYou ? `watch-pr (${hero.needYou})` : "watch-pr";
-  setFavicon(hero.needYou > 0);
-  setAppBadge(hero.needYou);
+  // The app badge outlives the window that set it, so the demo fallback must never write one.
+  if (!isSample) {
+    document.title = hero.needYou ? `watch-pr (${hero.needYou})` : "watch-pr";
+    setFavicon(hero.needYou > 0);
+    setAppBadge(hero.needYou);
+  }
 
   updateMeta(isSample);
 }
