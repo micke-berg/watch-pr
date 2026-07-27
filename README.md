@@ -16,6 +16,12 @@ Node plus your host's own CLI (`az` / `gh`).
 
 ![The watch-pr dashboard: a "needs you" counter over one card per PR, each showing CI, approvals, comments, and mergeability, sorted most-urgent-first (sample data shown).](docs/dashboard.png)
 
+**Try the interface first:** open `index.html?demo=1` straight from disk — no server, no token, no
+install. It renders the same dashboard over a sample dataset, clearly labelled, and stays inert:
+demo mode never polls, never writes, and never touches the app-icon badge. Sample data is *only*
+ever shown behind that flag, so a live dashboard that can't reach the watcher says so instead of
+quietly showing you fictional pull requests.
+
 ## What you get
 
 - A live dashboard at `http://localhost:7878` — one card per PR (CI, approvals, unresolved

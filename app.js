@@ -317,33 +317,78 @@ function doneSectionHtml(done) {
     ${body}`;
 }
 
+// ── view mode ────────────────────────────────────────────────────────────────
+// The sample data is a design preview at ?demo=1, never a stand-in for live state: a tool
+// that reports on your PRs must not answer "server unreachable" with nine healthy PRs.
+const DEMO = (() => {
+  try { return new URLSearchParams(location.search).has("demo"); } catch (e) { return false; }
+})();
+function viewMode() {
+  if (DEMO) return "demo";
+  if (latest && latest !== "error") return "live";
+  if (latest === "error") return "offline";
+  return "loading";
+}
+
+function noticeHtml(label, detail) {
+  const light = isLight();
+  const style = `display:flex; align-items:center; border-radius:20px; padding: clamp(22px,3vw,34px); background:${cola("neutral", light ? 0.09 : 0.05)}; border:1px dashed ${cola("neutral", light ? 0.30 : 0.22)};`;
+  return `<section style="${style}">
+      <div style="display:flex; flex-direction:column; gap:10px; min-width:0;">
+        <span style="font-family:${MONO}; font-size: clamp(15px,1.9vw,21px); font-weight:700; letter-spacing:0.22em; text-transform:uppercase; color: var(--title);">${esc(label)}</span>
+        <span style="font-family:${MONO}; font-size:12.5px; letter-spacing:0.06em; color: var(--t-mute);">${esc(detail)}</span>
+      </div>
+    </section>`;
+}
+function demoBannerHtml() {
+  const light = isLight();
+  return `<div style="display:flex; align-items:center; gap:13px; flex-wrap:wrap; border-radius:12px; padding:11px 15px; margin-bottom:14px; background:${cola("warn", light ? 0.12 : 0.08)}; border:1px solid ${cola("warn", light ? 0.34 : 0.26)};">
+      <span style="font-family:${MONO}; font-size:10.5px; font-weight:700; letter-spacing:0.20em; text-transform:uppercase; color:${col("warn")};">Demo</span>
+      <span style="font-family:${MONO}; font-size:12px; color: var(--t-mute);">Sample data — none of these pull requests are real.</span>
+    </div>`;
+}
+
 // ── top-level render ─────────────────────────────────────────────────────────
 function render() {
-  let prs, done, isSample;
-  if (!latest || latest === "error") {
+  const mode = viewMode();
+  const heroEl = document.getElementById("hero");
+  const cardsEl = document.getElementById("cards");
+  const doneEl = document.getElementById("doneSection");
+
+  if (mode === "loading" || mode === "offline") {
+    heroEl.innerHTML = mode === "loading"
+      ? noticeHtml("Connecting…", "Reading the watcher's state")
+      : noticeHtml("No connection", "Can't reach the watcher — start it with node server.js, or preview the design at ?demo=1");
+    cardsEl.innerHTML = "";
+    doneEl.innerHTML = "";
+    updateMeta(mode);
+    return;
+  }
+
+  let prs, done;
+  if (mode === "demo") {
     prs = SAMPLE_PRS.slice();
     done = SAMPLE_DONE.slice();
-    isSample = true;
   } else {
     const list = latest.watching || [];
     prs = list.filter((e) => !isDoneEntry(e)).map(activeVM);
     done = list.filter(isDoneEntry).map(doneVM);
-    isSample = false;
   }
   prs.sort((a, b) => statusMeta[a.status].rank - statusMeta[b.status].rank || a.id - b.id);
 
   const hero = heroHtml(prs);
-  document.getElementById("hero").innerHTML = hero.html;
-  document.getElementById("cards").innerHTML = prs.map(cardHtml).join("");
-  document.getElementById("doneSection").innerHTML = doneSectionHtml(done);
-  // The app badge outlives the window that set it, so the demo fallback must never write one.
-  if (!isSample) {
+  heroEl.innerHTML = (mode === "demo" ? demoBannerHtml() : "") + hero.html;
+  cardsEl.innerHTML = prs.map(cardHtml).join("");
+  doneEl.innerHTML = doneSectionHtml(done);
+
+  // The app badge outlives the window that set it, so only live counts may write one.
+  if (mode === "live") {
     document.title = hero.needYou ? `watch-pr (${hero.needYou})` : "watch-pr";
     setFavicon(hero.needYou > 0);
     setAppBadge(hero.needYou);
   }
 
-  updateMeta(isSample);
+  updateMeta(mode);
 }
 
 // App-icon badge for when watch-pr is INSTALLED as an app (Edge/Chrome "Install" → a pinned
@@ -379,16 +424,19 @@ function setDot(id, alive) {
   const size = id === "headDot" ? "9px" : "8px";
   el.style.cssText = `width:${size}; height:${size}; border-radius:50%; background:${alive ? col("go") : "var(--t-mute)"}; box-shadow:${alive ? `0 0 10px ${cola("go", 0.8)}` : "none"}; animation:${alive ? "blink 1.8s ease-in-out infinite" : "none"};`;
 }
-function updateMeta(isSample) {
-  if (isSample === undefined) isSample = (!latest || latest === "error");
+function updateMeta(mode) {
+  if (mode === undefined) mode = viewMode();
+  const live = mode === "live";
   const alive = !!(pollAlive && pollAlive.alive);
-  setDot("headDot", alive && !isSample);
-  setDot("footDot", alive && !isSample);
+  setDot("headDot", alive && live);
+  setDot("footDot", alive && live);
 
   // freshness
   const fresh = document.getElementById("freshText");
   if (checking) fresh.textContent = "checking…";
-  else if (isSample) fresh.textContent = "sample data";
+  else if (mode === "demo") fresh.textContent = "demo data";
+  else if (mode === "loading") fresh.textContent = "connecting…";
+  else if (mode === "offline") fresh.textContent = "no connection";
   else {
     let newest = "";
     (latest.watching || []).forEach((e) => {
@@ -400,7 +448,9 @@ function updateMeta(isSample) {
 
   // footer label
   const foot = document.getElementById("footLabel");
-  if (isSample) foot.textContent = "STATIC PREVIEW   ·   SAMPLE DATA";
+  if (mode === "demo") foot.textContent = "DEMO   ·   SAMPLE DATA";
+  else if (mode === "loading") foot.textContent = "CONNECTING…";
+  else if (mode === "offline") foot.textContent = "OFFLINE   ·   START SERVER.JS FOR LIVE UPDATES";
   else if (alive) {
     if (pollAlive.active && pollAlive.nextPollAt) {
       const rem = Math.max(0, Math.floor((new Date(pollAlive.nextPollAt).getTime() - Date.now()) / 1000));
@@ -416,7 +466,7 @@ function updateMeta(isSample) {
   const btn = document.getElementById("checkBtn");
   const spin = checking ? "display:inline-block;animation:spin 0.9s linear infinite;" : "display:inline-block;";
   btn.innerHTML = `<span style="${spin}">↻</span>${checking ? "CHECKING" : "CHECK NOW"}`;
-  btn.disabled = checking;
+  btn.disabled = checking || mode === "demo";
 
   // footer attribution (config-driven)
   const built = document.getElementById("footBuilt");
@@ -429,7 +479,7 @@ function updateMeta(isSample) {
 
 // ── actions ──────────────────────────────────────────────────────────────────
 async function checkNow() {
-  if (checking) return;
+  if (checking || DEMO) return;
   checking = true;
   updateMeta();
   try {
@@ -441,11 +491,13 @@ async function checkNow() {
   render();
 }
 async function dismiss(id, repo) {
+  if (DEMO) return;
   const q = "/dismiss?id=" + encodeURIComponent(id) + (repo ? "&repo=" + encodeURIComponent(repo) : "");
   try { await fetch(q, { method: "POST", cache: "no-store" }); } catch (e) {}
   tick();
 }
 async function clearDone() {
+  if (DEMO) return;
   try { await fetch("/clear-done", { method: "POST", cache: "no-store" }); } catch (e) {}
   tick();
 }
@@ -466,6 +518,7 @@ async function submitAdd() {
   const id = document.getElementById("addId").value.trim();
   const repo = document.getElementById("addRepo").value.trim();
   const err = document.getElementById("addErr");
+  if (DEMO) { err.style.color = "var(--t-mute)"; err.textContent = "disabled in demo mode"; return; }
   if (!/^\d+$/.test(id)) { err.style.color = col("crit"); err.textContent = "enter a numeric PR id"; return; }
   err.style.color = "var(--t-mute)"; err.textContent = "adding…";
   try {
@@ -548,9 +601,11 @@ document.getElementById("addBtn").addEventListener("click", () => toggleAdd(true
 document.getElementById("addId").addEventListener("keydown", (e) => { if (e.key === "Enter") submitAdd(); });
 
 applyTheme();  // set data-theme + meta/favicon/toggle, then first render
-loadConfig();
-tick();
-pollStatusTick();
-setInterval(tick, 3000);             // re-fetch state.json
-setInterval(pollStatusTick, 5000);   // re-check the resident poller
+if (!DEMO) {
+  loadConfig();
+  tick();
+  pollStatusTick();
+  setInterval(tick, 3000);           // re-fetch state.json
+  setInterval(pollStatusTick, 5000); // re-check the resident poller
+}
 setInterval(() => updateMeta(), 1000); // tick freshness + poll countdown
