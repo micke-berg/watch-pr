@@ -21,3 +21,20 @@ jobs:
           node-version: ${{ matrix.node }}
       # Zero runtime dependencies — nothing to install. Just run the built-in test runner.
       - run: node --test
+
+  # Single stable status check to gate merges on. Branch protection requires
+  # only this job, so the test matrix above can change freely without breaking
+  # the required-check name. Fails if any matrix leg failed or was skipped.
+  all-green:
+    name: all-green
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify the test matrix succeeded
+        run: |
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "test matrix result: ${{ needs.test.result }}"
+            exit 1
+          fi
+          echo "All test matrix legs passed."
