@@ -162,6 +162,12 @@ function cleanupCommands(e) {
   return cmds;
 }
 
+// Worktree paths come from Windows git output; path.basename on macOS/Linux
+// treats a backslash as part of the name, while the win32 variant splits on both.
+function folderName(dir) {
+  return path.win32.basename(dir);
+}
+
 function mergedNote(pr, local) {
   const id = pr.id;
   const title = (pr.display && pr.display.title) || pr.title || "";
@@ -170,7 +176,7 @@ function mergedNote(pr, local) {
   }
   const lines = [`# PR ${id} merged: local cleanup on offer`, "", `- PR: ${title}`, `- Link: ${pr.display ? pr.display.url : ""}`, ""];
   for (const e of local) {
-    lines.push(`## ${path.basename(e.mainDir)}`, "");
+    lines.push(`## ${folderName(e.mainDir)}`, "");
     lines.push(`- Local branch: ${e.hasBranch ? e.branch : "(already gone)"}`);
     lines.push(`- Worktree: ${e.worktree || (e.checkedOutInMain ? "none, the branch is checked out in the main clone" : "none")}`);
     if (e.dirty > 0) lines.push(`- WARNING: the worktree has ${e.dirty} uncommitted change(s). Removing it deletes them. Look first.`);
@@ -180,7 +186,7 @@ function mergedNote(pr, local) {
   }
   lines.push("Remote branches are not touched. Nothing above has run.", "",
     `Say "clean up PR ${id}" in a Claude session to run it after your yes.`, "");
-  const what = local.map((e) => [e.worktree ? `worktree ${path.basename(e.worktree)}` : "", e.hasBranch ? `branch ${e.branch}` : ""].filter(Boolean).join(" + ")).join("; ");
+  const what = local.map((e) => [e.worktree ? `worktree ${folderName(e.worktree)}` : "", e.hasBranch ? `branch ${e.branch}` : ""].filter(Boolean).join(" + ")).join("; ");
   const warn = local.some((e) => e.dirty !== 0) ? " (has uncommitted changes)" : "";
   return {
     reportName: `pr-${id}-merged.md`,
