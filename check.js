@@ -71,8 +71,8 @@ function titleFromBranch(branch) {
 
 // Deterministic notification, delegated to the cross-platform notifier (desktop toast
 // per OS + optional ntfy phone push). Fire-and-forget; never disturbs the poller.
-function fireNotify(title, message, open) {
-  try { notify(title, message, open); } catch (e) { /* best-effort */ }
+function fireNotify(title, message, open, urgent) {
+  try { notify(title, message, open, urgent); } catch (e) { /* best-effort */ }
 }
 
 function buildDisplay(pr, d, nowIso) {
@@ -193,17 +193,17 @@ async function refreshAll(state, opts) {
               const buildId = ((d.failedBuilds || [])[0] || {}).buildId;
               if (!buildId || buildId !== pr.ciReportedBuildId) {
                 const f = await followups.ciFailedFollowUp(provider, pr, d);
-                fireNotify(f.title, f.message, f.open);
+                fireNotify(f.title, f.message, f.open, true);
                 pr.ciReportedBuildId = f.buildId || buildId || "";
               }
-            } else if (an.ciFailed) fireNotify("CI failed", `#${pr.id} ${t}: build rejected`);
+            } else if (an.ciFailed) fireNotify("CI failed", `#${pr.id} ${t}: build rejected`, undefined, true);
             if (an.merged && config.localRepoRoots && config.localRepoRoots.length) {
               const f = followups.mergedFollowUp(pr);
               fireNotify(f.title, f.message, f.open);
             } else if (an.merged)     fireNotify("PR merged", `#${pr.id} ${t}: merged`);
             if (an.twoApprovals)      fireNotify("Ready to merge", `#${pr.id} ${t}: ${APPROVALS_PREFERRED} approvals reached`);
-            if (an.changesRequested)  fireNotify("Changes requested", `#${pr.id} ${t}: a reviewer is waiting on you`);
-            if (an.blockingComment)   fireNotify("Review comment", `#${pr.id} ${t}: new reviewer comment`);
+            if (an.changesRequested)  fireNotify("Changes requested", `#${pr.id} ${t}: a reviewer is waiting on you`, undefined, true);
+            if (an.blockingComment)   fireNotify("Review comment", `#${pr.id} ${t}: new reviewer comment`, undefined, true);
           }
           results.push({ id: pr.id, title: pr.display.title, phase, hasChanges, changes, actionNeeded, display: pr.display });
         } else {

@@ -23,17 +23,20 @@ function asAppleString(s) {
 }
 
 // open: optional local file or https URL the Windows toast opens when clicked.
-function desktop(title, message, open) {
+// urgent: the event needs the user's action; on Windows the toast stays on screen until clicked.
+function desktop(title, message, open, urgent) {
   try {
     if (process.platform === "win32") {
       // JSON over stdin => nothing to escape into a PowerShell command line.
+      // Not detached and not unref'd: a detached PowerShell, or one whose parent node exits
+      // before it has read stdin, shows no toast. Keeping it attached holds node open for the
+      // second or so the toast takes, which the CLI callers can afford.
       const child = spawn("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", NOTIFY_PS1],
-        { detached: true, stdio: ["pipe", "ignore", "ignore"], windowsHide: true });
+        { stdio: ["pipe", "ignore", "ignore"], windowsHide: true });
       child.on("error", () => {});
       child.stdin.on("error", () => {});
-      child.stdin.write(JSON.stringify({ title, message, open: open ? toUri(open) : "" }));
+      child.stdin.write(JSON.stringify({ title, message, open: open ? toUri(open) : "", urgent: !!urgent }));
       child.stdin.end();
-      child.unref();
     } else if (process.platform === "darwin") {
       const script = `display notification ${asAppleString(message)} with title ${asAppleString(title)}`;
       const child = spawn("osascript", ["-e", script], { detached: true, stdio: "ignore" });
@@ -78,16 +81,18 @@ function phone(title, message) {
   } catch (e) { /* best-effort */ }
 }
 
-function notify(title, message, open) {
-  desktop(title, message, open);
+function notify(title, message, open, urgent) {
+  desktop(title, message, open, urgent);
   phone(title, message);
 }
 
 module.exports = { notify, toUri };
 
-// CLI, for scripts and scheduled tasks: node notify.js "<title>" "<message>" [file-or-url-to-open]
+// CLI, for scripts and scheduled tasks: node notify.js [--urgent] "<title>" "<message>" [file-or-url-to-open]
 if (require.main === module) {
-  const [title, message, open] = process.argv.slice(2);
-  if (!title) { console.error("usage: node notify.js <title> <message> [open]"); process.exit(2); }
-  notify(title, message || "", open);
+  const argv = process.argv.slice(2);
+  const urgent = argv.includes("--urgent");
+  const [title, message, open] = argv.filter((a) => a !== "--urgent");
+  if (!title) { console.error("usage: node notify.js [--urgent] <title> <message> [open]"); process.exit(2); }
+  notify(title, message || "", open, urgent);
 }
