@@ -30,6 +30,10 @@ const DEFAULTS = {
                                                        //   azure: "repo"; github: "owner/repo"
   me: "",                                              // your identity (Azure display name / GitHub login); your own
                                                        //   comments never ping you. GitHub resolves it from gh if empty.
+  meUniqueName: "",                                    // optional: your sign-in name (azure: e-mail). When set, identity
+                                                       //   matching uses it instead of the display name.
+  localRepoRoots: [],                                  // folders holding your local clones. When set, a merged PR of yours
+                                                       //   gets a report of the local worktree + branch left to clean up.
   ntfyTopic: "",                                       // optional ntfy.sh topic for a phone push (empty = no phone push)
   ntfyServer: "https://ntfy.sh",                       // ntfy server base URL (self-host or ntfy.sh)
   port: 7878,                                          // dashboard/server port (PR_WATCH_PORT env overrides)

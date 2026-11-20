@@ -22,17 +22,21 @@ function asAppleString(s) {
   return '"' + String(s == null ? "" : s).replace(/[\r\n]+/g, " ").replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
 }
 
-function desktop(title, message) {
+// open: optional local file or https URL the Windows toast opens when clicked.
+// urgent: the event needs the user's action; on Windows the toast stays on screen until clicked.
+function desktop(title, message, open, urgent) {
   try {
     if (process.platform === "win32") {
       // JSON over stdin => nothing to escape into a PowerShell command line.
+      // Not detached and not unref'd: a detached PowerShell, or one whose parent node exits
+      // before it has read stdin, shows no toast. Keeping it attached holds node open for the
+      // second or so the toast takes, which the CLI callers can afford.
       const child = spawn("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", NOTIFY_PS1],
-        { detached: true, stdio: ["pipe", "ignore", "ignore"], windowsHide: true });
+        { stdio: ["pipe", "ignore", "ignore"], windowsHide: true });
       child.on("error", () => {});
       child.stdin.on("error", () => {});
-      child.stdin.write(JSON.stringify({ title, message }));
+      child.stdin.write(JSON.stringify({ title, message, open: open ? toUri(open) : "", urgent: !!urgent }));
       child.stdin.end();
-      child.unref();
     } else if (process.platform === "darwin") {
       const script = `display notification ${asAppleString(message)} with title ${asAppleString(title)}`;
       const child = spawn("osascript", ["-e", script], { detached: true, stdio: "ignore" });
@@ -45,6 +49,11 @@ function desktop(title, message) {
       child.unref();
     }
   } catch (e) { /* best-effort */ }
+}
+
+function toUri(target) {
+  if (/^https?:\/\//i.test(target)) return target;
+  return "file:///" + path.resolve(target).replace(/\\/g, "/").split("/").map(encodeURIComponent).join("/").replace(/^([A-Za-z])%3A/, "$1:");
 }
 
 function phone(title, message) {
@@ -72,9 +81,18 @@ function phone(title, message) {
   } catch (e) { /* best-effort */ }
 }
 
-function notify(title, message) {
-  desktop(title, message);
+function notify(title, message, open, urgent) {
+  desktop(title, message, open, urgent);
   phone(title, message);
 }
 
-module.exports = { notify };
+module.exports = { notify, toUri };
+
+// CLI, for scripts and scheduled tasks: node notify.js [--urgent] "<title>" "<message>" [file-or-url-to-open]
+if (require.main === module) {
+  const argv = process.argv.slice(2);
+  const urgent = argv.includes("--urgent");
+  const [title, message, open] = argv.filter((a) => a !== "--urgent");
+  if (!title) { console.error("usage: node notify.js [--urgent] <title> <message> [open]"); process.exit(2); }
+  notify(title, message || "", open, urgent);
+}

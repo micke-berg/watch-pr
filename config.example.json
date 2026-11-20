@@ -24,6 +24,9 @@
   "doneExpireHours": 24,
   "cadence": { "ciSeconds": 120, "reviewSeconds": 300 },
 
+  "_comment_local": "localRepoRoots: folders holding your local clones. When one of your PRs is merged, watch-pr lists the local worktree and branch left over and the commands to remove them (it never runs them, and never touches remote branches). Empty = off.",
+  "localRepoRoots": [],
+
   "_comment_notify": "Desktop notifications are automatic per-OS. For an optional phone push, set an ntfy topic (a long private string) and subscribe the ntfy app to it.",
   "ntfyTopic": "",
   "ntfyServer": "https://ntfy.sh",

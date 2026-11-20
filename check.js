@@ -20,6 +20,7 @@ const path = require("path");
 
 const config = require("./config.js");
 const { notify } = require("./notify.js"); // cross-platform desktop + optional phone push
+const followups = require("./followups.js");
 // The provider adapter is the seam: it produces the neutral decoded shape and the PR
 // web URL, and carries the "me" identity. Which adapter loads is config-driven, so the
 // core stays completely host-agnostic. The map is a whitelist so config can't require
@@ -70,8 +71,8 @@ function titleFromBranch(branch) {
 
 // Deterministic notification, delegated to the cross-platform notifier (desktop toast
 // per OS + optional ntfy phone push). Fire-and-forget; never disturbs the poller.
-function fireNotify(title, message) {
-  try { notify(title, message); } catch (e) { /* best-effort */ }
+function fireNotify(title, message, open, urgent) {
+  try { notify(title, message, open, urgent); } catch (e) { /* best-effort */ }
 }
 
 function buildDisplay(pr, d, nowIso) {
@@ -186,11 +187,23 @@ async function refreshAll(state, opts) {
           // the single review-requested ping fired at discovery is enough — so stay quiet here.
           if (pr.role !== "reviewer") {
             const an = actionNeeded, t = pr.display.title;
-            if (an.ciFailed)          fireNotify("CI failed", `#${pr.id} ${t}: build rejected`);
+            // A red build and a merge get a follow-up report (failing step + log lines, or the
+            // local cleanup on offer) when the provider can supply the details.
+            if (an.ciFailed && typeof provider.ciFailureDetails === "function") {
+              const buildId = ((d.failedBuilds || [])[0] || {}).buildId;
+              if (!buildId || buildId !== pr.ciReportedBuildId) {
+                const f = await followups.ciFailedFollowUp(provider, pr, d);
+                fireNotify(f.title, f.message, f.open, true);
+                pr.ciReportedBuildId = f.buildId || buildId || "";
+              }
+            } else if (an.ciFailed) fireNotify("CI failed", `#${pr.id} ${t}: build rejected`, undefined, true);
+            if (an.merged && config.localRepoRoots && config.localRepoRoots.length) {
+              const f = followups.mergedFollowUp(pr);
+              fireNotify(f.title, f.message, f.open);
+            } else if (an.merged)     fireNotify("PR merged", `#${pr.id} ${t}: merged`);
             if (an.twoApprovals)      fireNotify("Ready to merge", `#${pr.id} ${t}: ${APPROVALS_PREFERRED} approvals reached`);
-            if (an.changesRequested)  fireNotify("Changes requested", `#${pr.id} ${t}: a reviewer is waiting on you`);
-            if (an.blockingComment)   fireNotify("Review comment", `#${pr.id} ${t}: new reviewer comment`);
-            if (an.merged)            fireNotify("PR merged", `#${pr.id} ${t}: merged`);
+            if (an.changesRequested)  fireNotify("Changes requested", `#${pr.id} ${t}: a reviewer is waiting on you`, undefined, true);
+            if (an.blockingComment)   fireNotify("Review comment", `#${pr.id} ${t}: new reviewer comment`, undefined, true);
           }
           results.push({ id: pr.id, title: pr.display.title, phase, hasChanges, changes, actionNeeded, display: pr.display });
         } else {
