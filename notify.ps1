@@ -32,7 +32,7 @@ $safeMessage = Escape-Xml $message
 $safeOpen    = Escape-Xml $open
 $launch      = if ($open) { " activationType='protocol' launch='$safeOpen'" } else { "" }
 
-# Events that need Micke's action use the reminder scenario: it stays on screen until clicked
+# Events that need the user's action use the reminder scenario: it stays on screen until clicked
 # instead of sliding away after a few seconds. Windows ignores the scenario unless the toast
 # has at least one button, so urgent toasts always get a Dismiss button.
 $scenario = ""
