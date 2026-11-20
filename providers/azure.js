@@ -27,7 +27,7 @@ function prUrl(repo, id) {
 
 function az(argsStr) {
   return new Promise((resolve, reject) => {
-    exec(`"${AZ}" ${argsStr}`, { maxBuffer: 8 * 1024 * 1024, windowsHide: true }, (err, stdout, stderr) => {
+    exec(`"${AZ}" ${argsStr}`, { maxBuffer: 64 * 1024 * 1024, windowsHide: true, timeout: 180 * 1000 }, (err, stdout, stderr) => {
       if (err) return reject(new Error((stderr || "").trim() || err.message));
       try { resolve(JSON.parse(stdout || "null")); }
       catch (e) { reject(new Error("bad JSON from az: " + e.message)); }
@@ -90,15 +90,17 @@ async function decodePr(id, repo) {
   assertSafeRepo(repository);
   const [show, policies, threads] = await Promise.all([
     az(`repos pr show --id ${id} --query "{status:status, mergeStatus:mergeStatus, isDraft:isDraft, createdAt:creationDate, title:title, sourceRef:sourceRefName, targetRef:targetRefName, reviewers:reviewers[].{name:displayName, vote:vote, isContainer:isContainer}}" -o json`),
-    az(`repos pr policy list --id ${id} --query "[].{name:configuration.type.displayName, status:status}" -o json`),
+    az(`repos pr policy list --id ${id} --query "[].{name:configuration.type.displayName, status:status, buildId:context.buildId, pipeline:context.buildDefinitionName}" -o json`),
     az(`devops invoke --area git --resource pullRequestThreads --route-parameters project=${config.project} repositoryId=${repository} pullRequestId=${id} --query "value[].{id:id, status:status, comments:comments[].{author:author.displayName, type:commentType, content:content, updated:lastUpdatedDate}}" -o json`),
   ]);
 
   const reviewers = (show && show.reviewers) || [];
   const { approvals, approvalNames, changesRequested, blockerNames } = tallyVotes(reviewers, ME);
 
-  const buildPolicy = (policies || []).find((p) => p.name === "Build");
-  const buildRaw = buildPolicy ? buildPolicy.status : ""; // queued|running|approved|rejected|notApplicable|""
+  const buildRaw = combineBuildStatus(policies); // queued|running|approved|rejected|notApplicable|""
+  const failedBuilds = (policies || [])
+    .filter((p) => p.name === "Build" && p.status === "rejected" && p.buildId)
+    .map((p) => ({ buildId: p.buildId, pipeline: p.pipeline || "" }));
   const ci = ({ approved: "passed", rejected: "failed", queued: "queued", running: "running" })[buildRaw] || "none";
 
   // human discussion threads only (drop system/auto threads)
@@ -134,8 +136,122 @@ async function decodePr(id, repo) {
     buildRaw, ci,
     approvals, approvalNames,
     changesRequested, blockerNames,
-    openComments, threads: threadInfo, ready,
+    openComments, threads: threadInfo, ready, failedBuilds,
   };
+}
+
+// A PR can have several build validations. One red build makes the PR red, so the worst
+// status wins: rejected > running > queued > approved. Pure, exported for tests.
+function combineBuildStatus(policies) {
+  const statuses = (policies || []).filter((p) => p.name === "Build").map((p) => p.status);
+  if (!statuses.length) return "";
+  for (const s of ["rejected", "running", "queued", "approved"]) if (statuses.includes(s)) return s;
+  return statuses[0];
+}
+
+// Pick the log lines a human needs to see why a build failed. Real errors (compiler, test
+// runner, package manager) come first, then the tail of the log, because that is where
+// runners print their summary ("Failed tasks: ..."). Timestamps and colour codes are
+// stripped. Pure, exported for tests.
+const ERROR_PATTERNS = [
+  /error TS\d+/,
+  /^\s*FAIL\s/,
+  /npm ERR!|ERR_PNPM|ELIFECYCLE/,
+  /^\s*\d+:\d+\s+error\s/,
+  /^\s*(✖|×)\s/,
+  /##\[error\](?!.*exited with code)/,
+  /\bError:/,
+];
+function cleanLogLine(line) {
+  return String(line)
+    .replace(/^\d{4}-\d\d-\d\dT[\d:.]+Z ?/, "")
+    .replace(/\u001b\[[0-9;]*m/g, "")
+    .replace(/\[[0-9;]*m/g, "")
+    .replace(/\s+$/, "");
+}
+function pickLogLines(rawLines, max) {
+  max = max || 20;
+  const lines = (rawLines || []).map(cleanLogLine);
+  const errors = [];
+  for (const re of ERROR_PATTERNS) {
+    for (const l of lines) if (re.test(l) && !errors.includes(l.trim())) errors.push(l.trim());
+    if (errors.length >= 6) break;
+  }
+  const head = errors.slice(0, 6);
+  const tail = lines.filter((l) => l.trim() && !/^##\[section\]/.test(l)).slice(-(max - head.length));
+  const cut = (l) => (l.length > 240 ? l.slice(0, 240) + " …" : l);
+  return (head.length ? head.concat(["..."], tail) : tail).map(cut);
+}
+
+// Why did CI fail: for the first rejected build, the failing step, the errors the pipeline
+// reported, and the relevant log lines. Read-only. Takes the decoded PR so the policies
+// are not fetched twice.
+async function ciFailureDetails(id, repo, decoded) {
+  const failed = (decoded && decoded.failedBuilds) || [];
+  if (!failed.length) throw new Error("no failed build on this PR");
+  const { buildId, pipeline } = failed[0];
+  assertSafeId(buildId);
+  const timeline = await az(`devops invoke --area build --resource timeline --route-parameters project=${config.project} buildId=${buildId} --api-version 7.1 -o json`);
+  const records = ((timeline && timeline.records) || []).filter((r) => r.result === "failed");
+  const step = records.find((r) => r.type === "Task" && r.log) || records.find((r) => r.log) || records[0] || {};
+  let logLines = [];
+  if (step.log && step.log.id) {
+    assertSafeId(step.log.id);
+    const log = await az(`devops invoke --area build --resource logs --route-parameters project=${config.project} buildId=${buildId} logId=${step.log.id} --api-version 7.1 -o json`);
+    logLines = pickLogLines((log && log.value) || [], 20);
+  }
+  return {
+    buildId,
+    pipeline,
+    step: step.name || "(unknown step)",
+    issues: (step.issues || []).filter((i) => i.type === "error").map((i) => String(i.message || "").split(/\r?\n/)[0].slice(0, 300)).filter(Boolean),
+    logLines,
+    buildUrl: `${config.organization}/${config.project}/_build/results?buildId=${buildId}&view=logs`,
+  };
+}
+
+// Every active PR waiting for MY review: I am a reviewer myself, or a team I belong to is,
+// and I have not voted yet. Drafts and my own PRs are left out. Unlike
+// listReviewRequestedPrs this also sees team reviewers, which is how most requests arrive.
+async function listReviewInbox() {
+  if (!ME) throw new Error("config.me must be set to your Azure display name");
+  const [teams, prs] = await Promise.all([
+    az(`devops invoke --area core --resource teams --route-parameters projectId=${config.project} --query-parameters $mine=true $top=500 --api-version 7.1-preview -o json`),
+    az(`repos pr list --status active --top 1000 -o json`),
+  ]);
+  return reviewInboxFrom(prs, (teams && teams.value) || [], ME, config.meUniqueName);
+}
+
+// Pure filter behind listReviewInbox, exported for tests.
+function reviewInboxFrom(prs, myTeams, me, meUniqueName) {
+  const isMe = (r) => meUniqueName
+    ? String(r.uniqueName || "").toLowerCase() === String(meUniqueName).toLowerCase()
+    : r.displayName === me;
+  const teamName = (r) => String(r.displayName || "").replace(/^\[[^\]]*\]\\/, "");
+  const teamIds = new Set((myTeams || []).map((t) => t.id));
+  const out = [];
+  for (const p of prs || []) {
+    const reviewers = p.reviewers || [];
+    if (p.isDraft || isMe(p.createdBy || {})) continue;
+    const mine = reviewers.find(isMe);
+    if (mine && mine.vote) continue; // already voted
+    const viaTeams = reviewers.filter((r) => r.isContainer && teamIds.has(r.id));
+    if (!mine && !viaTeams.length) continue;
+    const repo = (p.repository && p.repository.name) || "";
+    out.push({
+      id: p.pullRequestId,
+      repo,
+      title: p.title || "",
+      author: (p.createdBy && p.createdBy.displayName) || "",
+      url: prUrl(repo, p.pullRequestId),
+      createdAt: p.creationDate || "",
+      sourceBranch: (p.sourceRefName || "").replace(/^refs\/heads\//, ""),
+      targetBranch: (p.targetRefName || "").replace(/^refs\/heads\//, ""),
+      via: mine ? "you" : viaTeams.map(teamName).join(", "),
+      teamVotes: viaTeams.filter((t) => t.vote).map((t) => ({ team: teamName(t), vote: t.vote })),
+    });
+  }
+  return out.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
 }
 
 // Optional: every open PR I authored, as [{ id, repo, createdAt }] — powers "watch all my
@@ -175,4 +291,4 @@ function rowsToPrs(rows) {
   return (rows || []).map((r) => ({ id: r.id, repo: r.repo || "", createdAt: r.createdAt || "" })).filter((r) => r.repo);
 }
 
-module.exports = { me: ME, prUrl, decodePr, listMyOpenPrs, listReviewRequestedPrs, assertSafeId, assertSafeRepo, tallyVotes, awaitingMyReview };
+module.exports = { me: ME, prUrl, decodePr, listMyOpenPrs, listReviewRequestedPrs, listReviewInbox, ciFailureDetails, assertSafeId, assertSafeRepo, tallyVotes, awaitingMyReview, combineBuildStatus, pickLogLines, reviewInboxFrom };

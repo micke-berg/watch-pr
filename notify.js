@@ -22,7 +22,8 @@ function asAppleString(s) {
   return '"' + String(s == null ? "" : s).replace(/[\r\n]+/g, " ").replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
 }
 
-function desktop(title, message) {
+// open: optional local file or https URL the Windows toast opens when clicked.
+function desktop(title, message, open) {
   try {
     if (process.platform === "win32") {
       // JSON over stdin => nothing to escape into a PowerShell command line.
@@ -30,7 +31,7 @@ function desktop(title, message) {
         { detached: true, stdio: ["pipe", "ignore", "ignore"], windowsHide: true });
       child.on("error", () => {});
       child.stdin.on("error", () => {});
-      child.stdin.write(JSON.stringify({ title, message }));
+      child.stdin.write(JSON.stringify({ title, message, open: open ? toUri(open) : "" }));
       child.stdin.end();
       child.unref();
     } else if (process.platform === "darwin") {
@@ -45,6 +46,11 @@ function desktop(title, message) {
       child.unref();
     }
   } catch (e) { /* best-effort */ }
+}
+
+function toUri(target) {
+  if (/^https?:\/\//i.test(target)) return target;
+  return "file:///" + path.resolve(target).replace(/\\/g, "/").split("/").map(encodeURIComponent).join("/").replace(/^([A-Za-z])%3A/, "$1:");
 }
 
 function phone(title, message) {
@@ -72,9 +78,16 @@ function phone(title, message) {
   } catch (e) { /* best-effort */ }
 }
 
-function notify(title, message) {
-  desktop(title, message);
+function notify(title, message, open) {
+  desktop(title, message, open);
   phone(title, message);
 }
 
-module.exports = { notify };
+module.exports = { notify, toUri };
+
+// CLI, for scripts and scheduled tasks: node notify.js "<title>" "<message>" [file-or-url-to-open]
+if (require.main === module) {
+  const [title, message, open] = process.argv.slice(2);
+  if (!title) { console.error("usage: node notify.js <title> <message> [open]"); process.exit(2); }
+  notify(title, message || "", open);
+}

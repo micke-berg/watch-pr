@@ -13,3 +13,5 @@ design/
 .DS_Store
 # local Claude Code config (launch.json etc.)
 .claude/
+reports/
+inbox/
